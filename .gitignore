@@ -1,0 +1,8 @@
+datasets/train_images/
+datasets/test_images/
+datasets/val_images/
+*.pth
+*.pt
+venv/
+__pycache__/
+.ipynb_checkpoints/
