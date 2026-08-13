@@ -11,12 +11,16 @@ class FLServer:
         self,
         num_clients=4,
         local_epochs=1,
-        max_batches=None
+        max_batches=None,
+        class_weights=None,
+        mu=0.0
     ):
 
         self.num_clients = num_clients
         self.local_epochs = local_epochs
         self.max_batches = max_batches
+        self.class_weights = class_weights
+        self.mu=mu
 
         # ==========================================
         # Device
@@ -47,7 +51,9 @@ class FLServer:
                 client_id=i,
                 batch_size=32,
                 local_epochs=local_epochs,
-                max_batches=max_batches
+                max_batches=max_batches,
+                class_weights=class_weights,
+                mu=mu
             )
             for i in range(
                 1,
@@ -117,6 +123,9 @@ class FLServer:
         client_weights = []
         client_sizes = []
 
+        client_train_losses = []
+        client_train_accuracies = []
+
         print(
             "\nStarting Federated Learning Round"
         )
@@ -133,7 +142,12 @@ class FLServer:
                 f"({len(client.dataset)} images)"
             )
 
-            weights, size = client.train(
+            (
+                weights,
+                size,
+                train_loss,
+                train_accuracy
+            ) = client.train(
                 self.global_model
             )
 
@@ -143,6 +157,14 @@ class FLServer:
 
             client_sizes.append(
                 size
+            )
+
+            client_train_losses.append(
+                train_loss
+            )
+
+            client_train_accuracies.append(
+                train_accuracy
             )
 
         # ==========================================
@@ -159,8 +181,44 @@ class FLServer:
             new_global_weights
         )
 
+        # ==========================================
+        # Weighted Training Metrics
+        # ==========================================
+
+        total_samples = sum(client_sizes)
+
+        train_loss = sum(
+            loss * size
+            for loss, size in zip(
+                client_train_losses,
+                client_sizes
+            )
+        ) / total_samples
+
+        train_accuracy = sum(
+            accuracy * size
+            for accuracy, size in zip(
+                client_train_accuracies,
+                client_sizes
+            )
+        ) / total_samples
+
         print(
             "\nFedAvg aggregation complete."
         )
 
-        return self.global_model
+        print(
+            f"Federated Training Loss: "
+            f"{train_loss:.4f}"
+        )
+
+        print(
+            f"Federated Training Accuracy: "
+            f"{train_accuracy:.2f}%"
+        )
+
+        return (
+            self.global_model,
+            train_loss,
+            train_accuracy
+        )

@@ -18,13 +18,17 @@ class FLClient:
         client_id,
         batch_size=32,
         local_epochs=1,
-        max_batches=None
+        max_batches=None,
+        class_weights=None,
+        mu=0.0
     ):
 
         self.client_id = client_id
         self.batch_size = batch_size
         self.local_epochs = local_epochs
         self.max_batches = max_batches
+        self.class_weights = class_weights
+        self.mu = mu
 
         # Project directories
         self.base_dir = Path(__file__).resolve().parent.parent
@@ -37,9 +41,8 @@ class FLClient:
         )
 
         self.image_dir = (
-            self.base_dir.parent
-            / "DR-Dataset"
-            / "images"
+            self.base_dir
+            / "datasets"
             / "train_images"
             / "train_images"
         )
@@ -94,12 +97,21 @@ class FLClient:
 
         model.train()
 
-        criterion = nn.CrossEntropyLoss()
+        if self.class_weights is not None:
+            criterion = nn.CrossEntropyLoss(
+                weight=self.class_weights.to(self.device)
+            )
+        else:
+            criterion = nn.CrossEntropyLoss()
 
         optimizer = torch.optim.Adam(
             model.parameters(),
             lr=0.0001
         )
+
+        total_loss = 0.0
+        total_correct = 0
+        total_samples = 0
 
         for epoch in range(self.local_epochs):
 
@@ -125,10 +137,37 @@ class FLClient:
 
                 outputs = model(images)
 
-                loss = criterion(
+                classification_loss = criterion(
                     outputs,
                     labels
                 )
+
+                # FedProx proximal term
+                proximal_loss = 0.0
+
+                if self.mu > 0:
+
+                    for local_param, global_param in zip(
+                        model.parameters(),
+                        global_model.parameters()
+                    ):
+
+                        proximal_loss += torch.sum(
+                            (local_param - global_param.detach()) ** 2
+                        )
+
+                    proximal_loss = (
+                        self.mu / 2
+                    ) * proximal_loss
+
+                else:
+
+                    proximal_loss = torch.tensor(
+                        0.0,
+                        device=self.device
+                    )
+
+                loss = classification_loss + proximal_loss
 
                 loss.backward()
 
@@ -169,4 +208,22 @@ class FLClient:
                 f"Accuracy: {epoch_accuracy:.2f}%"
             )
 
-        return model.state_dict(), len(self.dataset)
+            total_loss += epoch_loss
+            total_correct += correct
+            total_samples += total
+
+        # Average training metrics
+        train_loss = (
+            total_loss / self.local_epochs
+        )
+
+        train_accuracy = (
+            100 * total_correct / total_samples
+        )
+
+        return (
+            model.state_dict(),
+            len(self.dataset),
+            train_loss,
+            train_accuracy
+        )

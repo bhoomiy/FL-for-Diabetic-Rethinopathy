@@ -14,7 +14,7 @@ from datasets.preprocess import get_dataloaders
 # Settings
 # ==========================================
 
-MODEL_PATH = "global_model_round_3.pth"
+MODEL_PATH = "global_model_round_5.pth"
 
 CLASS_NAMES = [
     "No DR",

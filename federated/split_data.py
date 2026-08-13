@@ -9,27 +9,25 @@ from sklearn.model_selection import train_test_split
 # ======================================================
 
 NUM_CLIENTS = 4
+RANDOM_STATE = 42
 
 
 # ======================================================
 # PROJECT PATHS
 # ======================================================
 
-# Find the main project folder
 BASE_DIR = os.path.dirname(
     os.path.dirname(
         os.path.abspath(__file__)
     )
 )
 
-# Original training CSV
 INPUT_FILE = os.path.join(
     BASE_DIR,
     "datasets",
     "train_1.csv"
 )
 
-# Folder where client CSV files will be stored
 OUTPUT_FOLDER = os.path.join(
     BASE_DIR,
     "datasets",
@@ -67,30 +65,43 @@ os.makedirs(
 
 
 # ======================================================
-# SPLIT DATA INTO CLIENTS
+# IID STRATIFIED SPLIT
 # ======================================================
 
-remaining_data = df.copy()
+print("\nCreating IID client splits...")
 
 clients = []
 
+remaining_data = df.copy()
 
+# Split off the first 3 clients
 for i in range(NUM_CLIENTS - 1):
+
+    client_size = int(
+        len(df) / NUM_CLIENTS
+    )
+
+    # Calculate proportion of remaining data
+    test_size = (
+        len(remaining_data) - client_size
+    ) / len(remaining_data)
 
     client_data, remaining_data = train_test_split(
         remaining_data,
-        test_size=1 / (NUM_CLIENTS - i),
-        random_state=42,
+        test_size=test_size,
+        random_state=RANDOM_STATE + i,
         stratify=remaining_data["diagnosis"]
     )
 
-    clients.append(client_data)
+    clients.append(
+        client_data
+    )
 
 
-# The final client receives
-# whatever data remains
-
-clients.append(remaining_data)
+# Final client gets remaining samples
+clients.append(
+    remaining_data
+)
 
 
 # ======================================================
@@ -116,7 +127,10 @@ for i, client_data in enumerate(clients):
         index=False
     )
 
-    print(f"\nClient {i + 1}")
+    print(
+        f"\nClient {i + 1}"
+    )
+
     print("--------------------")
 
     print(
@@ -134,9 +148,38 @@ for i, client_data in enumerate(clients):
 
 
 # ======================================================
+# VERIFY TOTAL
+# ======================================================
+
+total_client_samples = sum(
+    len(client)
+    for client in clients
+)
+
+print("\n========================================")
+print("SPLIT VERIFICATION")
+print("========================================")
+
+print(
+    "Original samples:",
+    len(df)
+)
+
+print(
+    "Client samples:",
+    total_client_samples
+)
+
+print(
+    "Difference:",
+    len(df) - total_client_samples
+)
+
+
+# ======================================================
 # FINISHED
 # ======================================================
 
 print("\n========================================")
-print("CLIENT SPLITTING COMPLETE")
+print("IID CLIENT SPLITTING COMPLETE")
 print("========================================")
