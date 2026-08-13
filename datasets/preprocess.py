@@ -18,10 +18,9 @@ TRAIN_CSV = BASE_DIR / "train_1.csv"
 VAL_CSV = BASE_DIR / "valid.csv"
 TEST_CSV = BASE_DIR / "test.csv"
 
-TRAIN_IMAGE_DIR = BASE_DIR / "train_images" / "train_images"
-VAL_IMAGE_DIR = BASE_DIR / "val_images" / "val_images"
-TEST_IMAGE_DIR = BASE_DIR / "test_images" / "test_images"
-
+TRAIN_IMAGE_DIR = BASE_DIR.parent.parent / "DR-Dataset" / "images" / "train_images" / "train_images"
+VAL_IMAGE_DIR = BASE_DIR.parent.parent / "DR-Dataset" / "images" / "val_images" / "val_images"
+TEST_IMAGE_DIR = BASE_DIR.parent.parent / "DR-Dataset" / "images" / "test_images" / "test_images"
 
 # ======================================================
 # Image Transforms
