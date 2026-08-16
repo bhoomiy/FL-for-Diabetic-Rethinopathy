@@ -14,7 +14,7 @@ from datasets.preprocess import get_dataloaders
 # Settings
 # ==========================================
 
-MODEL_PATH = "global_model_non_iid_weighted_fedavg_round_5.pth"
+MODEL_PATH = "global_model_non_iid_fedprox_weighted_round_5.pth"
 
 CLASS_NAMES = [
     "No DR",
