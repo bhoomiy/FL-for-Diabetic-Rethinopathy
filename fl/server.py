@@ -1,4 +1,5 @@
 import copy
+
 import torch
 
 from models.mobilenet import DRMobileNetV2
@@ -13,38 +14,41 @@ class FLServer:
         local_epochs=1,
         max_batches=None,
         class_weights=None,
-        mu=0.0
+        mu=0.0,
+        client_folder="clients"
     ):
 
         self.num_clients = num_clients
         self.local_epochs = local_epochs
         self.max_batches = max_batches
         self.class_weights = class_weights
-        self.mu=mu
+        self.mu = mu
+        self.client_folder = client_folder
 
-        # ==========================================
-        # Device
-        # ==========================================
+        # ======================================================
+        # DEVICE
+        # ======================================================
 
         self.device = torch.device(
-            "cuda" if torch.cuda.is_available()
+            "cuda"
+            if torch.cuda.is_available()
             else "cpu"
         )
 
         print("Device:", self.device)
 
-        # ==========================================
-        # Global Model
-        # ==========================================
+        # ======================================================
+        # GLOBAL MODEL
+        # ======================================================
 
         self.global_model = DRMobileNetV2(
             num_classes=5,
             freeze_features=True
         ).to(self.device)
 
-        # ==========================================
-        # Create Clients
-        # ==========================================
+        # ======================================================
+        # CREATE CLIENTS
+        # ======================================================
 
         self.clients = [
             FLClient(
@@ -53,7 +57,8 @@ class FLServer:
                 local_epochs=local_epochs,
                 max_batches=max_batches,
                 class_weights=class_weights,
-                mu=mu
+                mu=mu,
+                client_folder=client_folder
             )
             for i in range(
                 1,
@@ -61,9 +66,29 @@ class FLServer:
             )
         ]
 
-    # ==========================================
-    # FedAvg
-    # ==========================================
+        # ======================================================
+        # DISPLAY CLIENT INFORMATION
+        # ======================================================
+
+        print(
+            f"Client dataset folder: "
+            f"{client_folder}"
+        )
+
+        print(
+            "Client dataset sizes:"
+        )
+
+        for client in self.clients:
+
+            print(
+                f"Client {client.client_id}: "
+                f"{len(client.dataset)} images"
+            )
+
+    # ==========================================================
+    # FEDAVG AGGREGATION
+    # ==========================================================
 
     def fedavg(
         self,
@@ -81,7 +106,10 @@ class FLServer:
 
         for key in global_weights.keys():
 
+            # --------------------------------------------------
             # Floating point tensors
+            # --------------------------------------------------
+
             if torch.is_floating_point(
                 global_weights[key]
             ):
@@ -105,7 +133,10 @@ class FLServer:
                         weights[key] * weight
                     )
 
-            # Integer tensors
+            # --------------------------------------------------
+            # Integer tensors / buffers
+            # --------------------------------------------------
+
             else:
 
                 global_weights[key] = (
@@ -114,9 +145,9 @@ class FLServer:
 
         return global_weights
 
-    # ==========================================
-    # One Federated Round
-    # ==========================================
+    # ==========================================================
+    # ONE FEDERATED ROUND
+    # ==========================================================
 
     def train_round(self):
 
@@ -130,9 +161,9 @@ class FLServer:
             "\nStarting Federated Learning Round"
         )
 
-        # ==========================================
-        # Local Client Training
-        # ==========================================
+        # ======================================================
+        # LOCAL CLIENT TRAINING
+        # ======================================================
 
         for client in self.clients:
 
@@ -167,9 +198,9 @@ class FLServer:
                 train_accuracy
             )
 
-        # ==========================================
-        # FedAvg
-        # ==========================================
+        # ======================================================
+        # FEDAVG AGGREGATION
+        # ======================================================
 
         new_global_weights = self.fedavg(
             client_weights,
@@ -181,11 +212,13 @@ class FLServer:
             new_global_weights
         )
 
-        # ==========================================
-        # Weighted Training Metrics
-        # ==========================================
+        # ======================================================
+        # FEDERATED TRAINING METRICS
+        # ======================================================
 
-        total_samples = sum(client_sizes)
+        total_samples = sum(
+            client_sizes
+        )
 
         train_loss = sum(
             loss * size
@@ -203,9 +236,22 @@ class FLServer:
             )
         ) / total_samples
 
-        print(
-            "\nFedAvg aggregation complete."
-        )
+        # ======================================================
+        # DISPLAY
+        # ======================================================
+
+        if self.mu > 0:
+
+            print(
+                "\nFedProx local training "
+                "with FedAvg aggregation complete."
+            )
+
+        else:
+
+            print(
+                "\nFedAvg aggregation complete."
+            )
 
         print(
             f"Federated Training Loss: "

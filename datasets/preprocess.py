@@ -14,26 +14,35 @@ from torchvision import transforms
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-DATASET_DIR = BASE_DIR / "datasets"
+# CSV files remain inside the FL project
+CSV_DIR = BASE_DIR / "datasets"
 
-TRAIN_CSV = DATASET_DIR / "train_1.csv"
-VAL_CSV = DATASET_DIR / "valid.csv"
-TEST_CSV = DATASET_DIR / "test.csv"
+TRAIN_CSV = CSV_DIR / "train_1.csv"
+VAL_CSV = CSV_DIR / "valid.csv"
+TEST_CSV = CSV_DIR / "test.csv"
+
+# Actual image dataset is stored outside the GitHub repository
+DATASET_DIR = Path(
+    r"C:\Users\Administrator\Documents\GitHub\DR-Dataset"
+)
 
 TRAIN_IMAGE_DIR = (
     DATASET_DIR
+    / "images"
     / "train_images"
     / "train_images"
 )
 
 VAL_IMAGE_DIR = (
     DATASET_DIR
+    / "images"
     / "val_images"
     / "val_images"
 )
 
 TEST_IMAGE_DIR = (
     DATASET_DIR
+    / "images"
     / "test_images"
     / "test_images"
 )
