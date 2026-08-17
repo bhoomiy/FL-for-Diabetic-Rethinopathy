@@ -128,7 +128,7 @@ class FLClient:
 
         model = DRMobileNetV2(
             num_classes=5,
-            freeze_features=True
+            freeze_features=False
         ).to(self.device)
 
         # ------------------------------------------------------
