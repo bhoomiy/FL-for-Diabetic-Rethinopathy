@@ -161,7 +161,7 @@ class FLClient:
 
         optimizer = torch.optim.Adam(
             model.parameters(),
-            lr=0.0001
+            lr=0.0005
         )
 
         # ------------------------------------------------------
