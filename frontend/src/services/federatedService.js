@@ -1,0 +1,47 @@
+import { CLIENTS, getClientById } from "@/data/clients";
+import { GLOBAL_METRICS, CLASS_METRICS } from "@/data/metrics";
+import { CONFUSION_MATRIX, CONFUSION_LABELS } from "@/data/confusionMatrix";
+import { apiRequest, withMockFallback, delay } from "./apiClient";
+
+// GET /clients
+export async function fetchClients() {
+  return withMockFallback(() => apiRequest("/clients"), CLIENTS);
+}
+
+// GET /clients/:id
+export async function fetchClient(id) {
+  return withMockFallback(() => apiRequest(`/clients/${id}`), getClientById(id));
+}
+
+// GET /metrics/global
+export async function fetchGlobalMetrics() {
+  return withMockFallback(() => apiRequest("/metrics/global"), GLOBAL_METRICS);
+}
+
+// GET /metrics/classes
+export async function fetchClassMetrics() {
+  return withMockFallback(() => apiRequest("/metrics/classes"), CLASS_METRICS);
+}
+
+// GET /confusion-matrix
+export async function fetchConfusionMatrix() {
+  return withMockFallback(() => apiRequest("/confusion-matrix"), {
+    labels: CONFUSION_LABELS,
+    matrix: CONFUSION_MATRIX,
+  });
+}
+
+// POST /clients/:id/train — simulated only, nothing is trained in the browser.
+export async function startLocalTraining(clientId, onProgress) {
+  for (let epoch = 1; epoch <= 5; epoch += 1) {
+    await delay(600);
+    onProgress?.({ epoch, totalEpochs: 5, progress: (epoch / 5) * 100 });
+  }
+  return { clientId, status: "completed", simulated: true };
+}
+
+// POST /clients/:id/synchronize — simulated only.
+export async function synchronizeGlobalModel(clientId) {
+  await delay(1200);
+  return { clientId, modelVersion: GLOBAL_METRICS.modelVersion, simulated: true };
+}
