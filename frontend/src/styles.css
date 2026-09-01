@@ -1,0 +1,122 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * FedRetina AI design system — warm, elegant clinical dashboard.
+ * All colors are semantic tokens. Never hardcode colors in components.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --font-sans:
+    "Plus Jakarta Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --shadow-card: 0 1px 2px rgb(41 39 36 / 0.06), 0 10px 28px rgb(41 39 36 / 0.07);
+}
+
+:root {
+  --radius: 0.875rem;
+  --background: #e7ded2;
+  --foreground: #292724;
+  --surface: #f5ede3;
+  --card: #fffaf3;
+  --card-foreground: #292724;
+  --popover: #fffaf3;
+  --popover-foreground: #292724;
+  --primary: #ed78ae;
+  --primary-foreground: #ffffff;
+  --secondary: #f5ede3;
+  --secondary-foreground: #292724;
+  --muted: #efe6da;
+  --muted-foreground: #807469;
+  --accent: #f3a2c6;
+  --accent-foreground: #292724;
+  --success: #557b67;
+  --success-foreground: #ffffff;
+  --warning: #b77b42;
+  --warning-foreground: #ffffff;
+  --destructive: #c6536e;
+  --destructive-foreground: #ffffff;
+  --border: #d8cbbd;
+  --input: #d8cbbd;
+  --ring: #ed78ae;
+  --sidebar: #292724;
+  --sidebar-foreground: #f5ede3;
+  --sidebar-muted: #a79c90;
+  --sidebar-border: #3d3a35;
+  --sidebar-accent: #35322e;
+  --chart-1: #ed78ae;
+  --chart-2: #557b67;
+  --chart-3: #b77b42;
+  --chart-4: #c6536e;
+  --chart-5: #6b7f9e;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+}
+
+@utility card-surface {
+  background-color: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+}

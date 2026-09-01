@@ -1,0 +1,48 @@
+// Single source of truth for demo accounts. Replace with a real /auth/login call later.
+export const DEMO_USERS = [
+  {
+    id: "u-admin",
+    name: "Dr. R. Menon",
+    email: "admin@fedretina.ai",
+    password: "admin123",
+    role: "admin",
+    roleLabel: "Research Administrator",
+    clientId: null,
+  },
+  {
+    id: "u-c1",
+    name: "Hospital A Coordinator",
+    email: "hospitala@fedretina.ai",
+    password: "hospital123",
+    role: "hospital",
+    roleLabel: "Hospital User",
+    clientId: "client-1",
+  },
+  {
+    id: "u-c2",
+    name: "Hospital B Coordinator",
+    email: "hospitalb@fedretina.ai",
+    password: "hospital123",
+    role: "hospital",
+    roleLabel: "Hospital User",
+    clientId: "client-2",
+  },
+  {
+    id: "u-c3",
+    name: "Hospital C Coordinator",
+    email: "hospitalc@fedretina.ai",
+    password: "hospital123",
+    role: "hospital",
+    roleLabel: "Hospital User",
+    clientId: "client-3",
+  },
+  {
+    id: "u-c4",
+    name: "Hospital D Coordinator",
+    email: "hospitald@fedretina.ai",
+    password: "hospital123",
+    role: "hospital",
+    roleLabel: "Hospital User",
+    clientId: "client-4",
+  },
+];
