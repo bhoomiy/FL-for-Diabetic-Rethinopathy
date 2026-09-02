@@ -9,29 +9,115 @@ import { CLIENTS } from "@/data/clients";
 import { CURRENT_BEST_CONFIG, RECENT_ACTIVITY, ROUND_CURVES } from "@/data/experiments";
 import { GLOBAL_METRICS, getWeakestClass } from "@/data/metrics";
 import { percent } from "@/components/charts/chartTheme";
+import { useEffect, useState } from "react";
+import {
+  fetchDashboard,
+  fetchTrainingHistory,
+  fetchClients,
+} from "@/services/federatedService";
 
 export default function DashboardPage() {
   const weakest = getWeakestClass();
 
-  const metrics = [
-    { label: "Active clients", value: String(GLOBAL_METRICS.activeClients), icon: Building2, hint: "Participating hospitals" },
-    { label: "Data distribution", value: GLOBAL_METRICS.distribution, icon: Layers, hint: "Current experiment split" },
-    { label: "Global algorithm", value: GLOBAL_METRICS.algorithm, icon: GitBranch, hint: "μ = 0.01" },
+    const [dashboardData, setDashboardData] = useState(null);
+    const [trainingHistory, setTrainingHistory] = useState([]);
+    const [clients, setClients] = useState([]);
+
+  useEffect(() => {
+    fetchDashboard()
+      .then((data) => {
+        setDashboardData(data);
+      })
+      .catch((error) => {
+        console.error("Failed to fetch dashboard data:", error);
+      });
+  }, []);
+
+  useEffect(() => {
+  fetchTrainingHistory()
+    .then((data) => {
+      setTrainingHistory(data);
+    })
+    .catch((error) => {
+      console.error("Failed to fetch training history:", error);
+    });
+}, []);
+
+useEffect(() => {
+  fetchClients()
+    .then((data) => {
+      setClients(data);
+    })
+    .catch((error) => {
+      console.error("Failed to fetch clients:", error);
+    });
+}, []);
+
+
+    const metrics = [
+    {
+      label: "Active clients",
+      value: dashboardData
+        ? String(dashboardData.active_clients)
+        : "Loading...",
+      icon: Building2,
+      hint: "Participating hospitals",
+    },
+
+    {
+      label: "Data distribution",
+      value: dashboardData?.distribution ?? "Loading...",
+      icon: Layers,
+      hint: "Current experiment split",
+    },
+
+    {
+      label: "Global algorithm",
+      value: dashboardData?.algorithm ?? "Loading...",
+      icon: GitBranch,
+      hint: "μ = 0",
+    },
+
     {
       label: "Validation accuracy",
-      value: percent(GLOBAL_METRICS.validationAccuracy.value),
+      value: dashboardData
+        ? `${dashboardData.validation_accuracy.toFixed(2)}%`
+        : "Loading...",
       icon: Target,
       confirmed: true,
     },
+
     {
       label: "Macro F1 score",
-      value: GLOBAL_METRICS.macroF1.value?.toFixed(3) ?? "Not available",
+      value: dashboardData
+        ? dashboardData.macro_f1.toFixed(3)
+        : "Loading...",
       icon: Activity,
-      confirmed: false,
+      confirmed: true,
     },
-    { label: "Communication rounds", value: String(GLOBAL_METRICS.rounds), icon: Repeat, hint: "5 local epochs each" },
-    { label: "Aggregation", value: GLOBAL_METRICS.aggregation, icon: Layers, hint: "Sample-size weighted" },
-    { label: "Global status", value: GLOBAL_METRICS.status, icon: ShieldCheck, hint: `Model ${GLOBAL_METRICS.modelVersion}` },
+
+    {
+      label: "Communication rounds",
+      value: dashboardData
+        ? String(dashboardData.rounds)
+        : "Loading...",
+      icon: Repeat,
+      hint: "Completed federated rounds",
+    },
+
+    {
+      label: "Aggregation",
+      value: GLOBAL_METRICS.aggregation,
+      icon: Layers,
+      hint: "Sample-size weighted",
+    },
+
+    {
+      label: "Global status",
+      value: GLOBAL_METRICS.status,
+      icon: ShieldCheck,
+      hint: `Model ${GLOBAL_METRICS.modelVersion}`,
+    },
   ];
 
   return (
@@ -66,22 +152,22 @@ export default function DashboardPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <ChartCard
           title="Training accuracy vs communication round"
-          subtitle="Best configuration — Non-IID + Weighted FedProx"
-          footer="Round-by-round curve values are demonstration data pending export from the training logs."
+          subtitle="IID + FedAvg"
+          footer="Round-by-round values loaded from the federated training results."
         >
           <AccuracyLineChart
-            data={ROUND_CURVES}
+            data={trainingHistory}
             series={[{ dataKey: "trainAcc", name: "Training accuracy", color: "var(--color-chart-1)" }]}
           />
         </ChartCard>
 
         <ChartCard
           title="Validation accuracy vs communication round"
-          subtitle="Round 20 matches the confirmed 80.33% validation accuracy"
-          footer="Only the final round value (80.33%) is a confirmed result."
+          subtitle="IID FedAvg validation accuracy across 5 communication rounds"
+          footer="Final validation accuracy: 78.14%."
         >
           <AccuracyLineChart
-            data={ROUND_CURVES}
+            data={trainingHistory}
             series={[{ dataKey: "valAcc", name: "Validation accuracy", color: "var(--color-chart-2)" }]}
           />
         </ChartCard>
@@ -105,7 +191,7 @@ export default function DashboardPage() {
         <div className="space-y-6 lg:col-span-2">
           <ChartCard title="Client participation" subtitle="Status of the four federated hospitals">
             <ul className="grid gap-3 sm:grid-cols-2">
-              {CLIENTS.map((c) => (
+              {clients.map((c) => (
                 <li key={c.id} className="rounded-xl border border-border bg-surface p-4">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-medium text-foreground">{c.name}</p>
@@ -114,9 +200,12 @@ export default function DashboardPage() {
                     </StatusBadge>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    {c.samples} samples · local accuracy {percent(c.localAccuracy)}
+                    {c.samples} samples
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">Contribution weight {(c.contributionWeight * 100).toFixed(0)}%</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Contribution weight{" "}
+                    {(c.contributionWeight * 100).toFixed(2)}%
+                  </p>
                 </li>
               ))}
             </ul>

@@ -5,7 +5,7 @@ import { apiRequest, withMockFallback, delay } from "./apiClient";
 
 // GET /clients
 export async function fetchClients() {
-  return withMockFallback(() => apiRequest("/clients"), CLIENTS);
+  return apiRequest("/clients");
 }
 
 // GET /clients/:id
@@ -45,3 +45,19 @@ export async function synchronizeGlobalModel(clientId) {
   await delay(1200);
   return { clientId, modelVersion: GLOBAL_METRICS.modelVersion, simulated: true };
 }
+
+// GET /dashboard
+export async function fetchDashboard() {
+  return apiRequest("/dashboard");
+}
+
+// GET /training-history
+export async function fetchTrainingHistory() {
+  return apiRequest("/training-history");
+}
+
+// GET /data-distribution
+export async function fetchDataDistribution() {
+  return apiRequest("/data-distribution");
+}
+

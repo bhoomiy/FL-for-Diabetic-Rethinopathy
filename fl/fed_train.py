@@ -32,7 +32,7 @@ BATCH_SIZE = 32
 # None = use the ENTIRE client dataset
 MAX_BATCHES = None
 
-MU = 0.01
+MU = 0.00
 
 # ==========================================
 # Global Validation

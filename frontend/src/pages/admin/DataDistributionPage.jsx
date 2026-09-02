@@ -1,44 +1,80 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import PageHeader from "@/components/common/PageHeader";
 import ChartCard from "@/components/common/ChartCard";
 import MetricCard from "@/components/common/MetricCard";
 import StatusBadge from "@/components/common/StatusBadge";
 import DistributionChart from "@/components/charts/DistributionChart";
-import { CLIENTS } from "@/data/clients";
 import { DR_CLASSES } from "@/constants/drClasses";
 import { TOOLTIP_PROPS } from "@/components/charts/chartTheme";
+import { fetchDataDistribution } from "@/services/federatedService";
 
-const clientRows = CLIENTS.map((c) => ({ client: c.name, ...c.distribution }));
 
-const iidRows = (() => {
-  const totals = DR_CLASSES.reduce((acc, c) => {
-    acc[c.key] = CLIENTS.reduce((sum, cl) => sum + cl.distribution[c.key], 0);
-    return acc;
-  }, {});
-  return CLIENTS.map((c) => {
-    const row = { client: c.name };
-    DR_CLASSES.forEach((d) => {
-      row[d.key] = Math.round(totals[d.key] / CLIENTS.length);
-    });
-    return row;
-  });
-})();
-
-const globalTotals = DR_CLASSES.map((c) => ({
-  name: c.label,
-  value: CLIENTS.reduce((sum, cl) => sum + cl.distribution[c.key], 0),
-  color: c.color,
-}));
-
-const totalSamples = globalTotals.reduce((a, b) => a + b.value, 0);
-const majority = globalTotals.reduce((a, b) => (b.value > a.value ? b : a));
-const minority = globalTotals.reduce((a, b) => (b.value < a.value ? b : a));
 
 export default function DataDistributionPage() {
-  const [mode, setMode] = useState("non-iid");
-  const rows = mode === "iid" ? iidRows : clientRows;
+  const [mode, setMode] = useState("iid");
+  const [distributionData, setDistributionData] = useState({
+  iid: [],
+  non_iid: [],
+});
 
+  useEffect(() => {
+  fetchDataDistribution()
+    .then((data) => {
+      setDistributionData(data);
+    })
+    .catch((error) => {
+      console.error("Failed to fetch data distribution:", error);
+    });
+}, []);
+const clients =
+  mode === "iid"
+    ? distributionData.iid
+    : distributionData.non_iid;
+
+  const clientRows = clients.map((client) => {
+  const row = {
+    client: client.name,
+  };
+
+  client.classes.forEach((item) => {
+    const drClass = DR_CLASSES[item.classId];
+
+    if (drClass) {
+      row[drClass.key] = item.count;
+    }
+  });
+
+  return row;
+});
+const globalTotals = DR_CLASSES.map((drClass, index) => {
+  const value = clients.reduce((sum, client) => {
+    const classItem = client.classes.find(
+      (item) => item.classId === index
+    );
+
+    return sum + (classItem?.count ?? 0);
+  }, 0);
+
+  return {
+    name: drClass.label,
+    value,
+    color: drClass.color,
+  };
+});
+const totalSamples = globalTotals.reduce(
+  (sum, item) => sum + item.value,
+  0
+);
+const majority =
+  globalTotals.length > 0
+    ? globalTotals.reduce((a, b) => (b.value > a.value ? b : a))
+    : { name: "Loading...", value: 0 };
+    const minority =
+  globalTotals.length > 0
+    ? globalTotals.reduce((a, b) => (b.value < a.value ? b : a))
+    : { name: "Loading...", value: 0 };
+  const rows = clientRows;
   return (
     <div className="space-y-6">
       <PageHeader
@@ -73,7 +109,11 @@ export default function DataDistributionPage() {
         <MetricCard label="Minority class" value={minority.name} hint={`${minority.value} samples`} />
         <MetricCard
           label="Imbalance ratio"
-          value={`${(majority.value / minority.value).toFixed(1)} : 1`}
+          value={
+              minority.value > 0
+                ? `${(majority.value / minority.value).toFixed(1)} : 1`
+                : "Loading..."
+          }
           hint="Majority to minority"
         />
       </div>
@@ -85,7 +125,11 @@ export default function DataDistributionPage() {
             ? "Every hospital receives a statistically similar class mix"
             : "Each hospital is dominated by a different DR stage, mirroring real screening populations"
         }
-        footer="Sample counts are demonstration data."
+        footer={
+          mode === "iid"
+            ? "Sample counts loaded from the actual IID client CSV files."
+            : "Sample counts loaded from the actual Non-IID client CSV files."
+        }
       >
         <DistributionChart data={rows} height={340} />
       </ChartCard>
@@ -121,8 +165,11 @@ export default function DataDistributionPage() {
 
         <ChartCard title="Per-client sample share" subtitle="Contribution weight in the weighted aggregation">
           <ul className="space-y-4">
-            {CLIENTS.map((c) => {
-              const share = (c.samples / CLIENTS.reduce((a, b) => a + b.samples, 0)) * 100;
+            {clients.map((c) => {
+  const share =
+    totalSamples > 0
+      ? (c.samples / totalSamples) * 100
+      : 0;
               return (
                 <li key={c.id}>
                   <div className="flex items-center justify-between text-xs">

@@ -49,13 +49,9 @@ class FLClient:
             / f"client_{client_id}.csv"
         )
 
-        self.image_dir = (
-            Path(
-            r"C:\Users\Administrator\Documents\GitHub\DR-Dataset")
-            / "images"
-            / "train_images"
-            / "train_images"
-        )
+        self.image_dir = Path(
+    r"C:\Users\RADHAGOPINATH\Downloads\FL-for-Diabetic-Rethinopathy\datasets\train_images\train_images"
+)
 
         # ======================================================
         # DEVICE
