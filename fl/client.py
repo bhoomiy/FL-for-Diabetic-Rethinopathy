@@ -14,15 +14,16 @@ from models.mobilenet import DRMobileNetV2
 class FLClient:
 
     def __init__(
-        self,
-        client_id,
-        batch_size=32,
-        local_epochs=1,
-        max_batches=None,
-        class_weights=None,
-        mu=0.0,
-        client_folder="clients"
-    ):
+    self,
+    client_id,
+    batch_size=32,
+    local_epochs=1,
+    max_batches=None,
+    class_weights=None,
+    mu=0.0,
+    client_folder="clients",
+    learning_rate=0.0005
+):
 
         self.client_id = client_id
         self.batch_size = batch_size
@@ -30,6 +31,7 @@ class FLClient:
         self.max_batches = max_batches
         self.class_weights = class_weights
         self.mu = mu
+        self.learning_rate = learning_rate
 
         # ======================================================
         # PROJECT DIRECTORIES
@@ -157,7 +159,7 @@ class FLClient:
 
         optimizer = torch.optim.Adam(
             model.parameters(),
-            lr=0.0005
+            lr=self.learning_rate
         )
 
         # ------------------------------------------------------

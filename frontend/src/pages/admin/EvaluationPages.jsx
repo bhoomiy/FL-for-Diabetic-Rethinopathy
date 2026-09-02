@@ -15,6 +15,7 @@ import {
   fetchClassMetrics,
   fetchConfusionMatrix,
   fetchClassImbalance,
+  fetchModelImprovement,
 } from "@/services/federatedService";
 
 export function ModelPerformancePage() {
@@ -388,27 +389,161 @@ export function ClassImbalancePage() {
 }
 
 export function ModelImprovementPage() {
-  const weakest = getWeakestClass();
-  const actions = [
-    { title: "Targeted augmentation for minority stages", text: "Apply rotation, contrast and lesion-preserving augmentation to Severe and Proliferative samples at the clients that hold them." },
-    { title: "Tune the proximal coefficient", text: "Sweep μ between 0.005 and 0.05 to trade convergence speed against client drift on the Non-IID split." },
-    { title: "Focal loss on minority classes", text: "Replace weighted cross-entropy with focal loss to concentrate gradient on hard, rare cases." },
-    { title: "Increase client participation", text: "Hospital D missed rounds 18 and 20; stabilising its uplink recovers the class it dominates." },
-    { title: "Report balanced accuracy", text: "Overall accuracy hides minority failure — track macro recall as the primary objective." },
-  ];
+  const [improvementData, setImprovementData] = useState(null);
+
+  useEffect(() => {
+    fetchModelImprovement()
+      .then((data) => {
+        setImprovementData(data);
+      })
+      .catch((error) => {
+        console.error("Failed to fetch model improvement data:", error);
+      });
+  }, []);
+
+  const weakest = improvementData?.weakest_class;
+  const secondary = improvementData?.secondary_weak_class;
+  const recommendations = improvementData?.recommendations ?? [];
+
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Next steps" title="Model improvement plan"
-        description={`Priorities for the next experiment cycle, focused on ${weakest.label} sensitivity rather than overall accuracy.`} />
-      <div className="grid gap-4 md:grid-cols-2">
-        {actions.map((a, i) => (
-          <section key={a.title} className="card-surface p-5">
-            <span className="grid size-8 place-items-center rounded-full border border-primary/40 bg-primary/10 text-xs font-semibold text-primary">{i + 1}</span>
-            <h2 className="mt-3 text-sm font-semibold text-foreground">{a.title}</h2>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{a.text}</p>
-          </section>
-        ))}
+      <PageHeader
+        eyebrow="Next steps"
+        title="Model improvement plan"
+        description="Recommendations based on the verified IID FedAvg global model evaluation."
+        actions={
+          <StatusBadge tone="warning">
+            {weakest
+              ? `Priority: ${weakest.label}`
+              : "Loading..."}
+          </StatusBadge>
+        }
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Weakest class"
+          value={weakest?.label ?? "Loading..."}
+        />
+
+        <MetricCard
+          label="Severe F1"
+          value={
+            weakest
+              ? weakest.f1.toFixed(3)
+              : "Loading..."
+          }
+        />
+
+        <MetricCard
+          label="Severe precision"
+          value={
+            weakest
+              ? weakest.precision.toFixed(3)
+              : "Loading..."
+          }
+        />
+
+        <MetricCard
+          label="Severe support"
+          value={
+            weakest
+              ? weakest.support
+              : "Loading..."
+          }
+        />
       </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <ChartCard
+          title="Primary weakness"
+          subtitle="Verified IID FedAvg evaluation"
+        >
+          {weakest ? (
+            <div className="space-y-4">
+              <PerformanceBar
+                label={`${weakest.label} precision`}
+                value={weakest.precision}
+                tone="danger"
+              />
+
+              <PerformanceBar
+                label={`${weakest.label} recall`}
+                value={weakest.recall}
+                tone="warning"
+              />
+
+              <PerformanceBar
+                label={`${weakest.label} F1`}
+                value={weakest.f1}
+                tone="danger"
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Loading evaluation data...
+            </p>
+          )}
+        </ChartCard>
+
+        <ChartCard
+          title="Secondary weak class"
+          subtitle="Proliferative DR"
+        >
+          {secondary ? (
+            <div className="space-y-4">
+              <PerformanceBar
+                label={`${secondary.label} precision`}
+                value={secondary.precision}
+                tone="warning"
+              />
+
+              <PerformanceBar
+                label={`${secondary.label} recall`}
+                value={secondary.recall}
+                tone="warning"
+              />
+
+              <PerformanceBar
+                label={`${secondary.label} F1`}
+                value={secondary.f1}
+                tone="warning"
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Loading evaluation data...
+            </p>
+          )}
+        </ChartCard>
+      </div>
+
+      <ChartCard
+        title="Recommended next experiments"
+        subtitle="Suggestions derived from current model weaknesses"
+        footer="These are proposed improvements and have not yet been experimentally validated."
+      >
+        <div className="grid gap-4 md:grid-cols-2">
+          {recommendations.map((item, index) => (
+            <section
+              key={item.title}
+              className="card-surface p-5"
+            >
+              <span className="grid size-8 place-items-center rounded-full border border-primary/40 bg-primary/10 text-xs font-semibold text-primary">
+                {index + 1}
+              </span>
+
+              <h2 className="mt-3 text-sm font-semibold text-foreground">
+                {item.title}
+              </h2>
+
+              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                {item.text}
+              </p>
+            </section>
+          ))}
+        </div>
+      </ChartCard>
     </div>
   );
 }

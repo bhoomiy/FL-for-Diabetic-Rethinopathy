@@ -1,7 +1,9 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import pandas as pd
 from pathlib import Path
+
+from fl.fed_train import run_experiment
 
 app = Flask(__name__)
 CORS(app)
@@ -240,6 +242,64 @@ def class_imbalance():
         "method": "Balanced class weighting",
         "source": "datasets/train_1.csv"
     })
+
+@app.route("/api/model-improvement", methods=["GET"])
+def model_improvement():
+    return jsonify({
+        "weakest_class": {
+            "label": "Severe",
+            "precision": 0.3333333333333333,
+            "recall": 0.6818181818181818,
+            "f1": 0.44776119402985076,
+            "support": 22
+        },
+
+        "secondary_weak_class": {
+            "label": "Proliferative DR",
+            "precision": 0.5909090909090909,
+            "recall": 0.4642857142857143,
+            "f1": 0.52,
+            "support": 28
+        },
+
+        "recommendations": [
+            {
+                "title": "Increase Severe-class training data",
+                "text": "The Severe class has the lowest F1 score and only 22 samples in the validation set. More representative Severe-stage data may improve generalisation."
+            },
+            {
+                "title": "Target minority-class augmentation",
+                "text": "Apply clinically appropriate augmentation to Severe and Proliferative DR samples to increase minority-class variation during local training."
+            },
+            {
+                "title": "Investigate Severe false positives",
+                "text": "Severe recall is relatively strong but precision is low, which means the model frequently predicts Severe for images belonging to other classes."
+            },
+            {
+                "title": "Evaluate focal loss",
+                "text": "Weighted cross-entropy is already being used. Focal loss can be evaluated in a future experiment to place more emphasis on difficult and minority examples."
+            }
+        ]
+    })
+
+@app.route("/api/experiments/start", methods=["POST"])
+def start_experiment():
+    data = request.get_json()
+
+    result = run_experiment(
+        distribution=data.get("distribution", "iid"),
+        algorithm=data.get("algorithm", "fedavg"),
+        rounds=data.get("rounds", 1),
+        local_epochs=data.get("local_epochs", 1),
+        batch_size=data.get("batch_size", 32),
+        learning_rate=data.get("learning_rate", 0.0005),
+        mu=data.get("mu", 0.01),
+        use_class_weights=data.get("use_class_weights", True),
+        max_batches=data.get("max_batches", 2),
+        test_run=data.get("test_run", True)
+    )
+
+    return jsonify(result)
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
