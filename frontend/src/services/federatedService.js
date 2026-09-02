@@ -20,15 +20,12 @@ export async function fetchGlobalMetrics() {
 
 // GET /metrics/classes
 export async function fetchClassMetrics() {
-  return withMockFallback(() => apiRequest("/metrics/classes"), CLASS_METRICS);
+  return apiRequest("/class-metrics");
 }
 
 // GET /confusion-matrix
 export async function fetchConfusionMatrix() {
-  return withMockFallback(() => apiRequest("/confusion-matrix"), {
-    labels: CONFUSION_LABELS,
-    matrix: CONFUSION_MATRIX,
-  });
+  return apiRequest("/confusion-matrix");
 }
 
 // POST /clients/:id/train — simulated only, nothing is trained in the browser.
@@ -60,4 +57,16 @@ export async function fetchTrainingHistory() {
 export async function fetchDataDistribution() {
   return apiRequest("/data-distribution");
 }
+
+// GET /model-performance
+export async function fetchModelPerformance() {
+  return apiRequest("/model-performance");
+}
+
+// GET /class-imbalance
+export async function fetchClassImbalance() {
+  return apiRequest("/class-imbalance");
+}
+
+
 

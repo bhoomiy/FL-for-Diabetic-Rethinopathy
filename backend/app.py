@@ -127,6 +127,119 @@ def data_distribution():
         "non_iid": read_distribution(non_iid_dir)
     })
 
+@app.route("/api/model-performance", methods=["GET"])
+def model_performance():
+    df = pd.read_csv(RESULTS_FILE)
+
+    latest = df.iloc[-1]
+
+    return jsonify({
+        "validation_accuracy": float(latest["val_accuracy"]),
+        "train_accuracy": float(latest["train_accuracy"]),
+        "macro_precision": float(latest["precision"]),
+        "macro_recall": float(latest["recall"]),
+        "macro_f1": float(latest["macro_f1"]),
+        "weighted_f1": float(latest["weighted_f1"]),
+        "rounds": int(latest["round"])
+    })
+
+@app.route("/api/class-metrics", methods=["GET"])
+def class_metrics():
+    return jsonify([
+        {
+            "key": "no_dr",
+            "label": "No DR",
+            "precision": 0.9714285714285714,
+            "recall": 0.9883720930232558,
+            "f1": 0.9798270893371758,
+            "support": 172
+        },
+        {
+            "key": "mild",
+            "label": "Mild",
+            "precision": 0.5740740740740741,
+            "recall": 0.775,
+            "f1": 0.6595744680851063,
+            "support": 40
+        },
+        {
+            "key": "moderate",
+            "label": "Moderate",
+            "precision": 0.8142857142857143,
+            "recall": 0.5480769230769231,
+            "f1": 0.6551724137931034,
+            "support": 104
+        },
+        {
+            "key": "severe",
+            "label": "Severe",
+            "precision": 0.3333333333333333,
+            "recall": 0.6818181818181818,
+            "f1": 0.44776119402985076,
+            "support": 22
+        },
+        {
+            "key": "proliferative",
+            "label": "Proliferative DR",
+            "precision": 0.5909090909090909,
+            "recall": 0.4642857142857143,
+            "f1": 0.52,
+            "support": 28
+        }
+    ])
+
+@app.route("/api/confusion-matrix", methods=["GET"])
+def get_confusion_matrix():
+    return jsonify({
+        "labels": [
+            "No DR",
+            "Mild",
+            "Moderate",
+            "Severe",
+            "Proliferative DR"
+        ],
+        "matrix": [
+            [170, 2, 0, 0, 0],
+            [1, 31, 5, 1, 2],
+            [4, 17, 57, 22, 4],
+            [0, 2, 2, 15, 3],
+            [0, 2, 6, 7, 13]
+        ]
+    })
+
+@app.route("/api/class-imbalance", methods=["GET"])
+def class_imbalance():
+    return jsonify({
+        "class_weights": [
+            {
+                "key": "no_dr",
+                "label": "No DR",
+                "weight": 0.4086
+            },
+            {
+                "key": "mild",
+                "label": "Mild",
+                "weight": 1.9533
+            },
+            {
+                "key": "moderate",
+                "label": "Moderate",
+                "weight": 0.7252
+            },
+            {
+                "key": "severe",
+                "label": "Severe",
+                "weight": 3.8052
+            },
+            {
+                "key": "proliferative",
+                "label": "Proliferative DR",
+                "weight": 2.5043
+            }
+        ],
+        "method": "Balanced class weighting",
+        "source": "datasets/train_1.csv"
+    })
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

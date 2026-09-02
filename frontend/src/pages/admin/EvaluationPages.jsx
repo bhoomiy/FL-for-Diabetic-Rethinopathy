@@ -5,77 +5,247 @@ import StatusBadge from "@/components/common/StatusBadge";
 import PerformanceBar from "@/components/charts/PerformanceBar";
 import ConfusionMatrixTable from "@/components/federated/ConfusionMatrixTable";
 import AccuracyLineChart from "@/components/charts/AccuracyLineChart";
-import { CLASS_METRICS, CLASS_WEIGHTS, GLOBAL_METRICS, WEIGHTING_COMPARISON, getWeakestClass } from "@/data/metrics";
-import { CONFUSION_LABELS, CONFUSION_MATRIX } from "@/data/confusionMatrix";
-import { EXPERIMENTS, ROUND_CURVES } from "@/data/experiments";
+import { CLASS_METRICS,  GLOBAL_METRICS,  getWeakestClass } from "@/data/metrics";
+import { EXPERIMENTS } from "@/data/experiments";
 import { percent } from "@/components/charts/chartTheme";
+import { useEffect, useState } from "react";
+import {
+  fetchModelPerformance,
+  fetchTrainingHistory,
+  fetchClassMetrics,
+  fetchConfusionMatrix,
+  fetchClassImbalance,
+} from "@/services/federatedService";
 
 export function ModelPerformancePage() {
-  const m = GLOBAL_METRICS;
+  const [metrics, setMetrics] = useState(null);
+  const [trainingHistory, setTrainingHistory] = useState([]);
+
+  useEffect(() => {
+    fetchModelPerformance()
+      .then((data) => {
+        setMetrics(data);
+      })
+      .catch((error) => {
+        console.error("Failed to fetch model performance:", error);
+      });
+  }, []);
+
+  useEffect(() => {
+    fetchTrainingHistory()
+      .then((data) => {
+        setTrainingHistory(data);
+      })
+      .catch((error) => {
+        console.error("Failed to fetch training history:", error);
+      });
+  }, []);
+
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Evaluation" title="Model performance"
-        description="Aggregate performance of the global model produced by the best federated configuration."
-        actions={<StatusBadge tone="success" dot>Model {m.modelVersion}</StatusBadge>} />
+      <PageHeader
+        eyebrow="Evaluation"
+        title="Model performance"
+        description="Performance of the global model from the IID FedAvg federated training run."
+        actions={
+          <StatusBadge tone="success" dot>
+            IID · FedAvg
+          </StatusBadge>
+        }
+      />
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <MetricCard label="Validation accuracy" value={percent(m.validationAccuracy.value)} confirmed />
-        <MetricCard label="Macro precision" value={m.macroPrecision.value.toFixed(3)} confirmed={false} />
-        <MetricCard label="Macro recall" value={m.macroRecall.value.toFixed(3)} confirmed={false} />
-        <MetricCard label="Macro F1" value={m.macroF1.value.toFixed(3)} confirmed={false} />
-        <MetricCard label="Weighted F1" value={m.weightedF1.value.toFixed(3)} confirmed={false} />
-        <MetricCard label="Balanced accuracy" value={percent(m.balancedAccuracy.value)} confirmed={false} />
+        <MetricCard
+          label="Validation accuracy"
+          value={
+            metrics
+              ? `${metrics.validation_accuracy.toFixed(2)}%`
+              : "Loading..."
+          }
+          confirmed
+        />
+
+        <MetricCard
+          label="Training accuracy"
+          value={
+            metrics
+              ? `${metrics.train_accuracy.toFixed(2)}%`
+              : "Loading..."
+          }
+          confirmed
+        />
+
+        <MetricCard
+          label="Macro precision"
+          value={
+            metrics
+              ? metrics.macro_precision.toFixed(3)
+              : "Loading..."
+          }
+          confirmed
+        />
+
+        <MetricCard
+          label="Macro recall"
+          value={
+            metrics
+              ? metrics.macro_recall.toFixed(3)
+              : "Loading..."
+          }
+          confirmed
+        />
+
+        <MetricCard
+          label="Macro F1"
+          value={
+            metrics
+              ? metrics.macro_f1.toFixed(3)
+              : "Loading..."
+          }
+          confirmed
+        />
+
+        <MetricCard
+          label="Weighted F1"
+          value={
+            metrics
+              ? metrics.weighted_f1.toFixed(3)
+              : "Loading..."
+          }
+          confirmed
+        />
       </div>
-      <ChartCard title="Accuracy across communication rounds" footer="Curve values are demonstration data; round 20 matches the confirmed result.">
-        <AccuracyLineChart data={ROUND_CURVES} height={300}
-          series={[{ dataKey: "trainAcc", name: "Training", color: "var(--color-chart-1)" },
-                   { dataKey: "valAcc", name: "Validation", color: "var(--color-chart-2)" }]} />
+
+      <ChartCard
+        title="Accuracy across communication rounds"
+        subtitle="IID + FedAvg"
+        footer="Round-by-round values loaded from the actual federated training results."
+      >
+        <AccuracyLineChart
+          data={trainingHistory}
+          height={300}
+          series={[
+            {
+              dataKey: "trainAcc",
+              name: "Training",
+              color: "var(--color-chart-1)",
+            },
+            {
+              dataKey: "valAcc",
+              name: "Validation",
+              color: "var(--color-chart-2)",
+            },
+          ]}
+        />
       </ChartCard>
     </div>
   );
 }
 
 export function ClassMetricsPage() {
-  const weakest = getWeakestClass();
+  const [classMetrics, setClassMetrics] = useState([]);
+
+  useEffect(() => {
+    fetchClassMetrics()
+      .then((data) => {
+        setClassMetrics(data);
+      })
+      .catch((error) => {
+        console.error("Failed to fetch class metrics:", error);
+      });
+  }, []);
+
+  const weakest =
+    classMetrics.length > 0
+      ? classMetrics.reduce((a, b) => (b.f1 < a.f1 ? b : a))
+      : { key: "", label: "Loading..." };
+
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Evaluation" title="Class-wise metrics"
-        description="Precision, recall and F1 for each of the five diabetic retinopathy stages."
-        actions={<StatusBadge tone="warning">Demonstration values</StatusBadge>} />
+      <PageHeader
+        eyebrow="Evaluation"
+        title="Class-wise metrics"
+        description="Precision, recall and F1 for each diabetic retinopathy stage from the IID FedAvg global model."
+        actions={
+          <StatusBadge tone="success">
+            Actual evaluation results
+          </StatusBadge>
+        }
+      />
+
       <div className="grid gap-6 lg:grid-cols-2">
-        <ChartCard title="Recall (sensitivity) per class" subtitle={`Weakest class: ${weakest.label}`}>
+        <ChartCard
+          title="Recall (sensitivity) per class"
+          subtitle={`Weakest class by F1: ${weakest.label}`}
+        >
           <div className="space-y-4">
-            {CLASS_METRICS.map((c) => (
-              <PerformanceBar key={c.key} label={c.label} value={c.recall}
-                weak={c.key === weakest.key} tone={c.key === weakest.key ? "danger" : "primary"} />
+            {classMetrics.map((c) => (
+              <PerformanceBar
+                key={c.key}
+                label={c.label}
+                value={c.recall}
+                weak={c.key === weakest.key}
+                tone={c.key === weakest.key ? "danger" : "primary"}
+              />
             ))}
           </div>
         </ChartCard>
+
         <ChartCard title="F1 score per class">
           <div className="space-y-4">
-            {CLASS_METRICS.map((c) => (
-              <PerformanceBar key={c.key} label={c.label} value={c.f1} tone="success" />
+            {classMetrics.map((c) => (
+              <PerformanceBar
+                key={c.key}
+                label={c.label}
+                value={c.f1}
+                tone="success"
+              />
             ))}
           </div>
         </ChartCard>
       </div>
+
       <ChartCard title="Full metric table">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[520px] text-left text-xs">
             <thead>
               <tr className="border-b border-border text-muted-foreground">
                 {["Class", "Precision", "Recall", "F1", "Support"].map((h) => (
-                  <th key={h} scope="col" className="px-3 py-2 font-medium">{h}</th>
+                  <th key={h} scope="col" className="px-3 py-2 font-medium">
+                    {h}
+                  </th>
                 ))}
               </tr>
             </thead>
+
             <tbody>
-              {CLASS_METRICS.map((c) => (
-                <tr key={c.key} className="border-b border-border last:border-b-0">
-                  <th scope="row" className="px-3 py-3 font-medium text-foreground">{c.label}</th>
-                  <td className="px-3 py-3 tabular-nums text-muted-foreground">{c.precision.toFixed(2)}</td>
-                  <td className="px-3 py-3 tabular-nums text-muted-foreground">{c.recall.toFixed(2)}</td>
-                  <td className="px-3 py-3 tabular-nums text-muted-foreground">{c.f1.toFixed(2)}</td>
-                  <td className="px-3 py-3 tabular-nums text-muted-foreground">{c.support}</td>
+              {classMetrics.map((c) => (
+                <tr
+                  key={c.key}
+                  className="border-b border-border last:border-b-0"
+                >
+                  <th
+                    scope="row"
+                    className="px-3 py-3 font-medium text-foreground"
+                  >
+                    {c.label}
+                  </th>
+
+                  <td className="px-3 py-3 tabular-nums text-muted-foreground">
+                    {c.precision.toFixed(2)}
+                  </td>
+
+                  <td className="px-3 py-3 tabular-nums text-muted-foreground">
+                    {c.recall.toFixed(2)}
+                  </td>
+
+                  <td className="px-3 py-3 tabular-nums text-muted-foreground">
+                    {c.f1.toFixed(2)}
+                  </td>
+
+                  <td className="px-3 py-3 tabular-nums text-muted-foreground">
+                    {c.support}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -87,44 +257,132 @@ export function ClassMetricsPage() {
 }
 
 export function ConfusionMatrixPage() {
+  const [confusionData, setConfusionData] = useState(null);
+
+  useEffect(() => {
+    fetchConfusionMatrix()
+      .then((data) => {
+        setConfusionData(data);
+      })
+      .catch((error) => {
+        console.error("Failed to fetch confusion matrix:", error);
+      });
+  }, []);
+
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Evaluation" title="Confusion matrix"
-        description="Where the global model confuses one diabetic retinopathy stage for another." />
-      <ChartCard title="Actual versus predicted class"
-        footer="Severe cases are most often misclassified as Moderate, which is the key clinical risk in this model.">
-        <ConfusionMatrixTable labels={CONFUSION_LABELS} matrix={CONFUSION_MATRIX} />
+      <PageHeader
+        eyebrow="Evaluation"
+        title="Confusion matrix"
+        description="Actual versus predicted diabetic retinopathy classes for the IID FedAvg global model."
+        actions={
+          <StatusBadge tone="success">
+            IID · FedAvg · 78.14%
+          </StatusBadge>
+        }
+      />
+
+      <ChartCard
+        title="Actual versus predicted class"
+        subtitle="Evaluation on 366 validation images"
+        footer="Values are generated from the same IID FedAvg checkpoint used for the reported 78.14% validation accuracy."
+      >
+        {confusionData ? (
+          <ConfusionMatrixTable
+            labels={confusionData.labels}
+            matrix={confusionData.matrix}
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Loading confusion matrix...
+          </p>
+        )}
       </ChartCard>
     </div>
   );
 }
 
 export function ClassImbalancePage() {
-  const weakest = getWeakestClass();
+  const [imbalanceData, setImbalanceData] = useState(null);
+
+  useEffect(() => {
+    fetchClassImbalance()
+      .then((data) => {
+        setImbalanceData(data);
+      })
+      .catch((error) => {
+        console.error("Failed to fetch class imbalance data:", error);
+      });
+  }, []);
+
+  const classWeights = imbalanceData?.class_weights ?? [];
+
+  const highestWeight =
+    classWeights.length > 0
+      ? classWeights.reduce((a, b) => (b.weight > a.weight ? b : a))
+      : { label: "Loading..." };
+
+  const maxWeight =
+    classWeights.length > 0
+      ? Math.max(...classWeights.map((c) => c.weight))
+      : 1;
+
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Evaluation" title="Class imbalance"
-        description="Minority DR stages are under-represented; class weighting compensates during local training."
-        actions={<StatusBadge tone="warning">Weakest class: {weakest.label}</StatusBadge>} />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <ChartCard title="Applied class weights" subtitle="Inverse-frequency weights used in the loss function">
-          <ul className="space-y-4">
-            {CLASS_WEIGHTS.map((c) => (
-              <PerformanceBar key={c.key} label={c.label} value={c.weight / 2.5} suffix={`(w = ${c.weight})`} tone="warning" />
-            ))}
-          </ul>
-        </ChartCard>
-        <ChartCard title="Recall before and after weighting" footer="Demonstration comparison values.">
-          <div className="space-y-5">
-            {WEIGHTING_COMPARISON.map((c) => (
-              <div key={c.label} className="space-y-2">
-                <PerformanceBar label={`${c.label} — before`} value={c.before} tone="danger" />
-                <PerformanceBar label={`${c.label} — after`} value={c.after} tone="success" />
-              </div>
-            ))}
-          </div>
-        </ChartCard>
-      </div>
+      <PageHeader
+        eyebrow="Evaluation"
+        title="Class imbalance"
+        description="Balanced class weighting is used during federated training so minority diabetic retinopathy stages contribute more strongly to the loss."
+        actions={
+          <StatusBadge tone="warning">
+            Highest weight: {highestWeight.label}
+          </StatusBadge>
+        }
+      />
+
+      <ChartCard
+        title="Applied class weights"
+        subtitle="Weights calculated from datasets/train_1.csv using balanced class weighting"
+        footer="Higher weights are assigned to less frequent classes during local client training."
+      >
+        <div className="space-y-4">
+          {classWeights.map((c) => (
+            <PerformanceBar
+              key={c.key}
+              label={c.label}
+              value={c.weight / maxWeight}
+              suffix={`w = ${c.weight.toFixed(4)}`}
+              tone="warning"
+            />
+          ))}
+        </div>
+      </ChartCard>
+
+      <ChartCard
+        title="Weighting strategy"
+        footer="These are the actual weights used by the current IID federated training pipeline."
+      >
+        <div className="space-y-3 text-sm text-muted-foreground">
+          <p>
+            Method:{" "}
+            <span className="font-medium text-foreground">
+              {imbalanceData?.method ?? "Loading..."}
+            </span>
+          </p>
+
+          <p>
+            Training source:{" "}
+            <span className="font-medium text-foreground">
+              {imbalanceData?.source ?? "Loading..."}
+            </span>
+          </p>
+
+          <p>
+            Severe and Proliferative DR receive substantially higher weights
+            because they are less represented in the training data.
+          </p>
+        </div>
+      </ChartCard>
     </div>
   );
 }
