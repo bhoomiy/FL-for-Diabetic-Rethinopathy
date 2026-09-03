@@ -18,15 +18,7 @@ export async function fetchGlobalMetrics() {
   return withMockFallback(() => apiRequest("/metrics/global"), GLOBAL_METRICS);
 }
 
-// GET /metrics/classes
-export async function fetchClassMetrics() {
-  return apiRequest("/class-metrics");
-}
 
-// GET /confusion-matrix
-export async function fetchConfusionMatrix() {
-  return apiRequest("/confusion-matrix");
-}
 
 // POST /clients/:id/train — simulated only, nothing is trained in the browser.
 export async function startLocalTraining(clientId, onProgress) {
@@ -58,10 +50,7 @@ export async function fetchDataDistribution() {
   return apiRequest("/data-distribution");
 }
 
-// GET /model-performance
-export async function fetchModelPerformance() {
-  return apiRequest("/model-performance");
-}
+
 
 // GET /class-imbalance
 export async function fetchClassImbalance() {
@@ -73,5 +62,23 @@ export async function fetchModelImprovement() {
   return apiRequest("/model-improvement");
 }
 
+// GET /model-performance
+export async function fetchModelPerformance(distribution = "iid") {
+  return apiRequest(
+    `/model-performance?distribution=${distribution}`
+  );
+}
 
+// GET /class-metrics
+export async function fetchClassMetrics(distribution = "iid") {
+  return apiRequest(
+    `/class-metrics?distribution=${distribution}`
+  );
+}
 
+// GET /confusion-matrix
+export async function fetchConfusionMatrix(distribution = "iid") {
+  return apiRequest(
+    `/confusion-matrix?distribution=${distribution}`
+  );
+}

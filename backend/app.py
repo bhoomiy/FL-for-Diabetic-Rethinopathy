@@ -131,75 +131,148 @@ def data_distribution():
 
 @app.route("/api/model-performance", methods=["GET"])
 def model_performance():
-    df = pd.read_csv(RESULTS_FILE)
+    distribution = request.args.get("distribution", "iid").lower()
 
-    latest = df.iloc[-1]
+    if distribution == "non_iid":
+        return jsonify({
+            "distribution": "non_iid",
+            "algorithm": "fedprox",
+            "validation_accuracy": 76.23,
+            "macro_precision": 0.5828,
+            "macro_recall": 0.6105,
+            "macro_f1": 0.5813,
+            "weighted_f1": 0.7539
+        })
 
     return jsonify({
-        "validation_accuracy": float(latest["val_accuracy"]),
-        "train_accuracy": float(latest["train_accuracy"]),
-        "macro_precision": float(latest["precision"]),
-        "macro_recall": float(latest["recall"]),
-        "macro_f1": float(latest["macro_f1"]),
-        "weighted_f1": float(latest["weighted_f1"]),
-        "rounds": int(latest["round"])
+        "distribution": "iid",
+        "algorithm": "fedavg",
+        "validation_accuracy": 78.14,
+        "train_accuracy": 78.50,
+        "macro_precision": 0.6570,
+        "macro_recall": 0.6915,
+        "macro_f1": 0.6525,
+        "weighted_f1": 0.7854
     })
 
 @app.route("/api/class-metrics", methods=["GET"])
 def class_metrics():
+    distribution = request.args.get("distribution", "iid").lower()
+
+    if distribution == "non_iid":
+        return jsonify([
+            {
+                "key": "no_dr",
+                "label": "No DR",
+                "precision": 0.9657,
+                "recall": 0.9826,
+                "f1": 0.9741,
+                "support": 172
+            },
+            {
+                "key": "mild",
+                "label": "Mild",
+                "precision": 0.4789,
+                "recall": 0.8500,
+                "f1": 0.6126,
+                "support": 40
+            },
+            {
+                "key": "moderate",
+                "label": "Moderate",
+                "precision": 0.7160,
+                "recall": 0.5577,
+                "f1": 0.6270,
+                "support": 104
+            },
+            {
+                "key": "severe",
+                "label": "Severe",
+                "precision": 0.1818,
+                "recall": 0.0909,
+                "f1": 0.1212,
+                "support": 22
+            },
+            {
+                "key": "proliferative",
+                "label": "Proliferative DR",
+                "precision": 0.5714,
+                "recall": 0.5714,
+                "f1": 0.5714,
+                "support": 28
+            }
+        ])
+
     return jsonify([
         {
             "key": "no_dr",
             "label": "No DR",
-            "precision": 0.9714285714285714,
-            "recall": 0.9883720930232558,
-            "f1": 0.9798270893371758,
+            "precision": 0.9714,
+            "recall": 0.9884,
+            "f1": 0.9798,
             "support": 172
         },
         {
             "key": "mild",
             "label": "Mild",
-            "precision": 0.5740740740740741,
-            "recall": 0.775,
-            "f1": 0.6595744680851063,
+            "precision": 0.5741,
+            "recall": 0.7750,
+            "f1": 0.6596,
             "support": 40
         },
         {
             "key": "moderate",
             "label": "Moderate",
-            "precision": 0.8142857142857143,
-            "recall": 0.5480769230769231,
-            "f1": 0.6551724137931034,
+            "precision": 0.8143,
+            "recall": 0.5481,
+            "f1": 0.6552,
             "support": 104
         },
         {
             "key": "severe",
             "label": "Severe",
-            "precision": 0.3333333333333333,
-            "recall": 0.6818181818181818,
-            "f1": 0.44776119402985076,
+            "precision": 0.3333,
+            "recall": 0.6818,
+            "f1": 0.4478,
             "support": 22
         },
         {
             "key": "proliferative",
             "label": "Proliferative DR",
-            "precision": 0.5909090909090909,
-            "recall": 0.4642857142857143,
-            "f1": 0.52,
+            "precision": 0.5909,
+            "recall": 0.4643,
+            "f1": 0.5200,
             "support": 28
         }
     ])
-
 @app.route("/api/confusion-matrix", methods=["GET"])
-def get_confusion_matrix():
+def confusion_matrix_data():
+    distribution = request.args.get("distribution", "iid").lower()
+
+    labels = [
+        "No DR",
+        "Mild",
+        "Moderate",
+        "Severe",
+        "Proliferative DR"
+    ]
+
+    if distribution == "non_iid":
+        return jsonify({
+            "distribution": "non_iid",
+            "labels": labels,
+            "matrix": [
+                [169, 3, 0, 0, 0],
+                [1, 34, 3, 1, 1],
+                [5, 29, 58, 7, 5],
+                [0, 2, 12, 2, 6],
+                [0, 3, 8, 1, 16]
+            ]
+        })
+
     return jsonify({
-        "labels": [
-            "No DR",
-            "Mild",
-            "Moderate",
-            "Severe",
-            "Proliferative DR"
-        ],
+        "distribution": "iid",
+        "labels": labels,
         "matrix": [
             [170, 2, 0, 0, 0],
             [1, 31, 5, 1, 2],
@@ -295,11 +368,117 @@ def start_experiment():
         learning_rate=data.get("learning_rate", 0.0005),
         mu=data.get("mu", 0.01),
         use_class_weights=data.get("use_class_weights", True),
-        max_batches=data.get("max_batches", 2),
-        test_run=data.get("test_run", True)
+        max_batches=data.get("max_batches", None),
+        test_run=data.get("test_run", False)
     )
 
     return jsonify(result)
 
+@app.route("/api/experiments", methods=["GET"])
+def get_experiments():
+    experiments_dir = BASE_DIR / "results" / "experiments"
+
+    if not experiments_dir.exists():
+        return jsonify([])
+
+    experiments = []
+
+    for experiment_dir in experiments_dir.iterdir():
+        if not experiment_dir.is_dir():
+            continue
+
+        summary_path = experiment_dir / "summary.json"
+        config_path = experiment_dir / "config.json"
+
+        if not summary_path.exists() or not config_path.exists():
+            continue
+
+        try:
+            import json
+
+            with open(summary_path, "r", encoding="utf-8") as f:
+                summary = json.load(f)
+
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+
+            experiment = {
+                "id": summary.get(
+                    "experiment_id",
+                    experiment_dir.name
+                ),
+
+                "date": summary.get(
+                    "created_at",
+                    config.get("created_at", "")
+                ),
+
+                "algorithm": config.get(
+                    "algorithm",
+                    "unknown"
+                ),
+
+                "distribution": config.get(
+                    "distribution",
+                    "unknown"
+                ),
+
+                "aggregation": config.get(
+                    "aggregation",
+                    "weighted"
+                ),
+
+                "learningRate": config.get(
+                    "learning_rate"
+                ),
+
+                "mu": config.get("mu"),
+
+                "classWeighting": config.get(
+                    "use_class_weights",
+                    True
+                ),
+
+                "rounds": config.get(
+                    "rounds"
+                ),
+
+                "accuracy": summary.get(
+                    "best_val_accuracy"
+                ),
+
+                "macroF1": summary.get(
+                    "final_macro_f1"
+                ),
+
+                "weightedF1": summary.get(
+                    "final_weighted_f1"
+                ),
+
+                "bestRound": summary.get(
+                    "best_round"
+                ),
+
+                "status": summary.get(
+                    "status",
+                    "completed"
+                ),
+            }
+
+            experiments.append(experiment)
+
+        except Exception as error:
+            print(
+                f"Failed to load experiment "
+                f"{experiment_dir.name}: {error}"
+            )
+
+    experiments.sort(
+        key=lambda e: e.get("date", ""),
+        reverse=True
+    )
+
+    return jsonify(experiments)
+
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=True, use_reloader=False)

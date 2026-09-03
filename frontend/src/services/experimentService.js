@@ -1,10 +1,7 @@
 import { EXPERIMENTS, ROUND_CURVES, CURRENT_BEST_CONFIG } from "@/data/experiments";
 import { apiRequest, withMockFallback, delay } from "./apiClient";
 
-// GET /experiments
-export async function fetchExperiments() {
-  return withMockFallback(() => apiRequest("/experiments"), EXPERIMENTS);
-}
+
 
 // GET /experiments/:id
 export async function fetchExperiment(id) {
@@ -23,13 +20,46 @@ export async function fetchDashboardSummary() {
 }
 
 // POST /experiments — simulated run. No training happens in the browser.
-export async function startExperiment(config, onProgress) {
-  const totalRounds = Number(config.rounds) || 20;
-  for (let round = 1; round <= totalRounds; round += 1) {
-    await delay(160);
-    onProgress?.({ round, totalRounds, progress: (round / totalRounds) * 100 });
+const API_BASE = "http://localhost:5000/api";
+
+export async function startExperiment(config) {
+  const payload = {
+    distribution: config.distribution.toLowerCase().replace("-", "_"),
+    algorithm: config.algorithm.toLowerCase(),
+    rounds: config.rounds,
+    local_epochs: config.localEpochs,
+    batch_size: config.batchSize,
+    learning_rate: config.learningRate,
+    mu: config.algorithm === "FedProx" ? config.mu : 0,
+    use_class_weights: config.classWeighting,
+    max_batches: null,
+    test_run: false,
+  };
+
+  const response = await fetch(`${API_BASE}/experiments/start`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Failed to start experiment");
   }
-  return { experimentId: `EXP-${25 + Math.floor(totalRounds % 3)}`, status: "queued", simulated: true };
+
+  return response.json();
+}
+
+export async function fetchExperiments() {
+  const response = await fetch("http://localhost:5000/api/experiments");
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch experiments");
+  }
+
+  return response.json();
 }
 
 export function exportExperimentsToCsv(rows) {

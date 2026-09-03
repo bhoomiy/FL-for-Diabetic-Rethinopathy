@@ -1,6 +1,10 @@
 import torch
 import torch.nn as nn
 import pandas as pd
+import matplotlib
+
+matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
 from sklearn.utils.class_weight import compute_class_weight
 import numpy as np

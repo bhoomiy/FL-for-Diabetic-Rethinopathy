@@ -9,14 +9,14 @@ import { CURRENT_BEST_CONFIG } from "@/data/experiments";
 import { startExperiment } from "@/services/experimentService";
 
 const DEFAULTS = {
-  distribution: "Non-IID",
+  distribution: "IID",
   aggregation: "Weighted",
-  algorithm: "FedProx",
+  algorithm: "FedAvg",
   learningRate: 0.0005,
-  mu: 0.01,
+  mu: 0.0,
   classWeighting: true,
-  rounds: 20,
-  localEpochs: 5,
+  rounds: 1,
+  localEpochs: 1,
   batchSize: 32,
 };
 
@@ -36,19 +36,28 @@ const selectClass =
 export default function ConfigureExperimentPage() {
   const [config, setConfig] = useState(DEFAULTS);
   const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState(null);
   const [result, setResult] = useState(null);
 
   const update = (patch) => setConfig((c) => ({ ...c, ...patch }));
 
   const run = async () => {
+  try {
     setRunning(true);
     setResult(null);
-    setProgress({ round: 0, totalRounds: config.rounds, progress: 0 });
-    const res = await startExperiment(config, setProgress);
+
+    const res = await startExperiment(config);
+
     setResult(res);
+  } catch (error) {
+    console.error("Experiment failed:", error);
+
+    setResult({
+      error: error.message || "Experiment failed",
+    });
+  } finally {
     setRunning(false);
-  };
+  }
+};
 
   return (
     <div className="space-y-6">
@@ -56,8 +65,7 @@ export default function ConfigureExperimentPage() {
         eyebrow="Planning"
         title="Configure experiment"
         description="Assemble a federated configuration and queue it for the training backend."
-        actions={<StatusBadge tone="warning">Simulated run — no training happens in the browser</StatusBadge>}
-      />
+        actions={<StatusBadge tone="success">Connected to federated training backend</StatusBadge>}/>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
@@ -128,7 +136,7 @@ export default function ConfigureExperimentPage() {
               <Field label={`Communication rounds — ${config.rounds}`}>
                 <input
                   type="range"
-                  min="5"
+                  min="1"
                   max="50"
                   step="5"
                   value={config.rounds}
@@ -175,41 +183,49 @@ export default function ConfigureExperimentPage() {
 
             <div className="mt-6 flex flex-wrap gap-2 border-t border-border pt-5">
               <Button onClick={run} disabled={running}>
-                <Play className="size-4" aria-hidden="true" /> {running ? "Running simulation…" : "Run experiment"}
+                <Play className="size-4" aria-hidden="true" />{running ? "Training…" : "Run experiment"}
               </Button>
               <Button variant="outline" onClick={() => setConfig(DEFAULTS)} disabled={running}>
                 <RotateCcw className="size-4" aria-hidden="true" /> Reset to best config
               </Button>
             </div>
 
-            {progress ? (
-              <div className="mt-5" aria-live="polite">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>
-                    Round {progress.round} of {progress.totalRounds}
-                  </span>
-                  <span className="tabular-nums">{progress.progress.toFixed(0)}%</span>
-                </div>
-                <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress.progress}%` }} />
-                </div>
-              </div>
-            ) : null}
+
 
             {result ? (
-              <p className="mt-4 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-foreground">
-                Simulation finished. {result.experimentId} would be queued on the training server — no accuracy is
-                reported because no real training ran.
-              </p>
+              result.error ? (
+                <p className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  Experiment failed: {result.error}
+                </p>
+              ) : (
+                <div className="mt-4 rounded-lg border border-success/30 bg-success/10 px-3 py-3 text-xs text-foreground">
+                  <p className="font-medium">
+                    Experiment completed successfully.
+                  </p>
+
+                  <p className="mt-1 text-muted-foreground">
+                    Experiment ID: {result.experiment_id}
+                  </p>
+
+                  <p className="text-muted-foreground">
+                    Best validation accuracy:{" "}
+                    {result.best_val_accuracy != null
+                      ? `${result.best_val_accuracy.toFixed(2)}%`
+                      : "Not available"}
+                  </p>
+
+                  <p className="text-muted-foreground">
+                    Best round: {result.best_round ?? "Not available"}
+                  </p>
+                </div>
+              )
             ) : null}
           </ChartCard>
 
           <section className="card-surface flex gap-3 p-5">
             <Info className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
             <p className="text-xs leading-relaxed text-muted-foreground">
-              This screen produces a configuration payload for the future training backend. When the API is connected,
-              the same form posts to <code className="text-foreground">POST /experiments</code> and streams real
-              round-by-round progress.
+              This configuration is sent to the federated training backend. Four hospital clients train locally, their model updates are aggregated on the server, and the resulting experiment artifacts are saved for evaluation and comparison.
             </p>
           </section>
         </div>

@@ -19,49 +19,96 @@ import {
 } from "@/services/federatedService";
 
 export function ModelPerformancePage() {
+  const [distribution, setDistribution] = useState("iid");
   const [metrics, setMetrics] = useState(null);
   const [trainingHistory, setTrainingHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchModelPerformance()
+    setLoading(true);
+    setMetrics(null);
+
+    fetchModelPerformance(distribution)
       .then((data) => {
         setMetrics(data);
       })
       .catch((error) => {
         console.error("Failed to fetch model performance:", error);
+      })
+      .finally(() => {
+        setLoading(false);
       });
-  }, []);
+  }, [distribution]);
 
   useEffect(() => {
-    fetchTrainingHistory()
-      .then((data) => {
-        setTrainingHistory(data);
-      })
-      .catch((error) => {
-        console.error("Failed to fetch training history:", error);
-      });
-  }, []);
+    if (distribution === "iid") {
+      fetchTrainingHistory()
+        .then((data) => {
+          setTrainingHistory(data);
+        })
+        .catch((error) => {
+          console.error("Failed to fetch training history:", error);
+        });
+    } else {
+      setTrainingHistory([]);
+    }
+  }, [distribution]);
+
+  const isIID = distribution === "iid";
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Evaluation"
         title="Model performance"
-        description="Performance of the global model from the IID FedAvg federated training run."
+        description={
+          isIID
+            ? "Performance of the global model from the verified IID FedAvg federated training run."
+            : "Performance of the global model from the verified Non-IID weighted FedProx federated training run."
+        }
         actions={
           <StatusBadge tone="success" dot>
-            IID · FedAvg
+            {isIID ? "IID · FedAvg" : "Non-IID · FedProx"}
           </StatusBadge>
         }
       />
+
+      {/* Distribution selector */}
+      <div className="flex w-fit rounded-lg border border-border bg-card p-1">
+        <button
+          type="button"
+          onClick={() => setDistribution("iid")}
+          className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            isIID
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          IID
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setDistribution("non_iid")}
+          className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            !isIID
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Non-IID
+        </button>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <MetricCard
           label="Validation accuracy"
           value={
-            metrics
-              ? `${metrics.validation_accuracy.toFixed(2)}%`
-              : "Loading..."
+            loading
+              ? "Loading..."
+              : metrics
+                ? `${metrics.validation_accuracy.toFixed(2)}%`
+                : "N/A"
           }
           confirmed
         />
@@ -69,19 +116,23 @@ export function ModelPerformancePage() {
         <MetricCard
           label="Training accuracy"
           value={
-            metrics
-              ? `${metrics.train_accuracy.toFixed(2)}%`
-              : "Loading..."
+            loading
+              ? "Loading..."
+              : metrics?.train_accuracy != null
+                ? `${metrics.train_accuracy.toFixed(2)}%`
+                : "N/A"
           }
-          confirmed
+          confirmed={metrics?.train_accuracy != null}
         />
 
         <MetricCard
           label="Macro precision"
           value={
-            metrics
-              ? metrics.macro_precision.toFixed(3)
-              : "Loading..."
+            loading
+              ? "Loading..."
+              : metrics
+                ? metrics.macro_precision.toFixed(3)
+                : "N/A"
           }
           confirmed
         />
@@ -89,9 +140,11 @@ export function ModelPerformancePage() {
         <MetricCard
           label="Macro recall"
           value={
-            metrics
-              ? metrics.macro_recall.toFixed(3)
-              : "Loading..."
+            loading
+              ? "Loading..."
+              : metrics
+                ? metrics.macro_recall.toFixed(3)
+                : "N/A"
           }
           confirmed
         />
@@ -99,9 +152,11 @@ export function ModelPerformancePage() {
         <MetricCard
           label="Macro F1"
           value={
-            metrics
-              ? metrics.macro_f1.toFixed(3)
-              : "Loading..."
+            loading
+              ? "Loading..."
+              : metrics
+                ? metrics.macro_f1.toFixed(3)
+                : "N/A"
           }
           confirmed
         />
@@ -109,195 +164,359 @@ export function ModelPerformancePage() {
         <MetricCard
           label="Weighted F1"
           value={
-            metrics
-              ? metrics.weighted_f1.toFixed(3)
-              : "Loading..."
+            loading
+              ? "Loading..."
+              : metrics
+                ? metrics.weighted_f1.toFixed(3)
+                : "N/A"
           }
           confirmed
         />
       </div>
 
-      <ChartCard
-        title="Accuracy across communication rounds"
-        subtitle="IID + FedAvg"
-        footer="Round-by-round values loaded from the actual federated training results."
-      >
-        <AccuracyLineChart
-          data={trainingHistory}
-          height={300}
-          series={[
-            {
-              dataKey: "trainAcc",
-              name: "Training",
-              color: "var(--color-chart-1)",
-            },
-            {
-              dataKey: "valAcc",
-              name: "Validation",
-              color: "var(--color-chart-2)",
-            },
-          ]}
-        />
-      </ChartCard>
+      {isIID ? (
+        <ChartCard
+          title="Accuracy across communication rounds"
+          subtitle="IID + FedAvg"
+          footer="Round-by-round values loaded from the actual federated training results."
+        >
+          <AccuracyLineChart
+            data={trainingHistory}
+            height={300}
+            series={[
+              {
+                dataKey: "trainAcc",
+                name: "Training",
+                color: "var(--color-chart-1)",
+              },
+              {
+                dataKey: "valAcc",
+                name: "Validation",
+                color: "var(--color-chart-2)",
+              },
+            ]}
+          />
+        </ChartCard>
+      ) : (
+        <ChartCard
+          title="Accuracy across communication rounds"
+          subtitle="Non-IID + weighted FedProx"
+          footer="Round-wise validation metrics were not recorded by the original Non-IID training script."
+        >
+          <div className="flex min-h-[180px] items-center justify-center text-center">
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                Final model evaluation available
+              </p>
+
+              <p className="mt-2 max-w-lg text-xs leading-relaxed text-muted-foreground">
+                The verified Non-IID checkpoint was evaluated after round 5,
+                but validation accuracy was not recorded after every
+                communication round. The final verified validation accuracy is{" "}
+                <span className="font-semibold text-foreground">
+                  76.23%
+                </span>.
+              </p>
+            </div>
+          </div>
+        </ChartCard>
+      )}
     </div>
   );
 }
 
 export function ClassMetricsPage() {
+  const [distribution, setDistribution] = useState("iid");
   const [classMetrics, setClassMetrics] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchClassMetrics()
+    setLoading(true);
+    setClassMetrics([]);
+
+    fetchClassMetrics(distribution)
       .then((data) => {
         setClassMetrics(data);
       })
       .catch((error) => {
         console.error("Failed to fetch class metrics:", error);
+      })
+      .finally(() => {
+        setLoading(false);
       });
-  }, []);
+  }, [distribution]);
 
   const weakest =
     classMetrics.length > 0
       ? classMetrics.reduce((a, b) => (b.f1 < a.f1 ? b : a))
       : { key: "", label: "Loading..." };
 
+  const isIID = distribution === "iid";
+
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Evaluation"
         title="Class-wise metrics"
-        description="Precision, recall and F1 for each diabetic retinopathy stage from the IID FedAvg global model."
+        description={
+          isIID
+            ? "Precision, recall and F1 for each diabetic retinopathy stage from the verified IID FedAvg global model."
+            : "Precision, recall and F1 for each diabetic retinopathy stage from the verified Non-IID weighted FedProx global model."
+        }
         actions={
           <StatusBadge tone="success">
-            Actual evaluation results
+            {isIID ? "IID · FedAvg" : "Non-IID · FedProx"}
           </StatusBadge>
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <ChartCard
-          title="Recall (sensitivity) per class"
-          subtitle={`Weakest class by F1: ${weakest.label}`}
+      <div className="flex w-fit rounded-lg border border-border bg-card p-1">
+        <button
+          type="button"
+          onClick={() => setDistribution("iid")}
+          className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            isIID
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
         >
-          <div className="space-y-4">
-            {classMetrics.map((c) => (
-              <PerformanceBar
-                key={c.key}
-                label={c.label}
-                value={c.recall}
-                weak={c.key === weakest.key}
-                tone={c.key === weakest.key ? "danger" : "primary"}
-              />
-            ))}
-          </div>
-        </ChartCard>
+          IID
+        </button>
 
-        <ChartCard title="F1 score per class">
-          <div className="space-y-4">
-            {classMetrics.map((c) => (
-              <PerformanceBar
-                key={c.key}
-                label={c.label}
-                value={c.f1}
-                tone="success"
-              />
-            ))}
-          </div>
-        </ChartCard>
+        <button
+          type="button"
+          onClick={() => setDistribution("non_iid")}
+          className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            !isIID
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Non-IID
+        </button>
       </div>
 
-      <ChartCard title="Full metric table">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[520px] text-left text-xs">
-            <thead>
-              <tr className="border-b border-border text-muted-foreground">
-                {["Class", "Precision", "Recall", "F1", "Support"].map((h) => (
-                  <th key={h} scope="col" className="px-3 py-2 font-medium">
-                    {h}
-                  </th>
+      {loading ? (
+        <p className="text-sm text-muted-foreground">
+          Loading class metrics...
+        </p>
+      ) : (
+        <>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <ChartCard
+              title="Recall (sensitivity) per class"
+              subtitle={`Weakest class by F1: ${weakest.label}`}
+            >
+              <div className="space-y-4">
+                {classMetrics.map((c) => (
+                  <PerformanceBar
+                    key={c.key}
+                    label={c.label}
+                    value={c.recall}
+                    weak={c.key === weakest.key}
+                    tone={c.key === weakest.key ? "danger" : "primary"}
+                  />
                 ))}
-              </tr>
-            </thead>
+              </div>
+            </ChartCard>
 
-            <tbody>
-              {classMetrics.map((c) => (
-                <tr
-                  key={c.key}
-                  className="border-b border-border last:border-b-0"
-                >
-                  <th
-                    scope="row"
-                    className="px-3 py-3 font-medium text-foreground"
-                  >
-                    {c.label}
-                  </th>
+            <ChartCard title="F1 score per class">
+              <div className="space-y-4">
+                {classMetrics.map((c) => (
+                  <PerformanceBar
+                    key={c.key}
+                    label={c.label}
+                    value={c.f1}
+                    tone={c.key === weakest.key ? "danger" : "success"}
+                  />
+                ))}
+              </div>
+            </ChartCard>
+          </div>
 
-                  <td className="px-3 py-3 tabular-nums text-muted-foreground">
-                    {c.precision.toFixed(2)}
-                  </td>
+          <ChartCard title="Full metric table">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[520px] text-left text-xs">
+                <thead>
+                  <tr className="border-b border-border text-muted-foreground">
+                    {["Class", "Precision", "Recall", "F1", "Support"].map((h) => (
+                      <th
+                        key={h}
+                        scope="col"
+                        className="px-3 py-2 font-medium"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
 
-                  <td className="px-3 py-3 tabular-nums text-muted-foreground">
-                    {c.recall.toFixed(2)}
-                  </td>
+                <tbody>
+                  {classMetrics.map((c) => (
+                    <tr
+                      key={c.key}
+                      className="border-b border-border last:border-b-0"
+                    >
+                      <th
+                        scope="row"
+                        className="px-3 py-3 font-medium text-foreground"
+                      >
+                        {c.label}
+                      </th>
 
-                  <td className="px-3 py-3 tabular-nums text-muted-foreground">
-                    {c.f1.toFixed(2)}
-                  </td>
+                      <td className="px-3 py-3 tabular-nums text-muted-foreground">
+                        {c.precision.toFixed(4)}
+                      </td>
 
-                  <td className="px-3 py-3 tabular-nums text-muted-foreground">
-                    {c.support}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </ChartCard>
+                      <td className="px-3 py-3 tabular-nums text-muted-foreground">
+                        {c.recall.toFixed(4)}
+                      </td>
+
+                      <td className="px-3 py-3 tabular-nums text-muted-foreground">
+                        {c.f1.toFixed(4)}
+                      </td>
+
+                      <td className="px-3 py-3 tabular-nums text-muted-foreground">
+                        {c.support}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </ChartCard>
+        </>
+      )}
     </div>
   );
 }
 
 export function ConfusionMatrixPage() {
+  const [distribution, setDistribution] = useState("iid");
   const [confusionData, setConfusionData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchConfusionMatrix()
+    setLoading(true);
+    setConfusionData(null);
+
+    fetchConfusionMatrix(distribution)
       .then((data) => {
         setConfusionData(data);
       })
       .catch((error) => {
         console.error("Failed to fetch confusion matrix:", error);
+      })
+      .finally(() => {
+        setLoading(false);
       });
-  }, []);
+  }, [distribution]);
+
+  const isIID = distribution === "iid";
+  const accuracy = isIID ? "78.14%" : "76.23%";
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Evaluation"
         title="Confusion matrix"
-        description="Actual versus predicted diabetic retinopathy classes for the IID FedAvg global model."
+        description={
+          isIID
+            ? "Actual versus predicted diabetic retinopathy classes for the verified IID FedAvg global model."
+            : "Actual versus predicted diabetic retinopathy classes for the verified Non-IID weighted FedProx global model."
+        }
         actions={
           <StatusBadge tone="success">
-            IID · FedAvg · 78.14%
+            {isIID
+              ? "IID · FedAvg · 78.14%"
+              : "Non-IID · FedProx · 76.23%"}
           </StatusBadge>
         }
       />
 
+      <div className="flex w-fit rounded-lg border border-border bg-card p-1">
+        <button
+          type="button"
+          onClick={() => setDistribution("iid")}
+          className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            isIID
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          IID
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setDistribution("non_iid")}
+          className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            !isIID
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Non-IID
+        </button>
+      </div>
+
       <ChartCard
         title="Actual versus predicted class"
         subtitle="Evaluation on 366 validation images"
-        footer="Values are generated from the same IID FedAvg checkpoint used for the reported 78.14% validation accuracy."
+        footer={
+          isIID
+            ? "Values come from the verified IID FedAvg checkpoint with 78.14% validation accuracy."
+            : "Values come from the verified Non-IID weighted FedProx checkpoint with 76.23% validation accuracy."
+        }
       >
-        {confusionData ? (
+        {loading ? (
+          <p className="text-sm text-muted-foreground">
+            Loading confusion matrix...
+          </p>
+        ) : confusionData ? (
           <ConfusionMatrixTable
             labels={confusionData.labels}
             matrix={confusionData.matrix}
           />
         ) : (
           <p className="text-sm text-muted-foreground">
-            Loading confusion matrix...
+            Confusion matrix unavailable.
           </p>
         )}
+      </ChartCard>
+
+      <ChartCard
+        title="Evaluation summary"
+        subtitle={isIID ? "IID + FedAvg" : "Non-IID + weighted FedProx"}
+      >
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div>
+            <p className="text-xs text-muted-foreground">
+              Validation samples
+            </p>
+            <p className="mt-1 text-lg font-semibold text-foreground">
+              366
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground">
+              Validation accuracy
+            </p>
+            <p className="mt-1 text-lg font-semibold text-foreground">
+              {accuracy}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground">
+              Weakest class
+            </p>
+            <p className="mt-1 text-lg font-semibold text-foreground">
+              Severe
+            </p>
+          </div>
+        </div>
       </ChartCard>
     </div>
   );
@@ -331,21 +550,21 @@ export function ClassImbalancePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Evaluation"
-        title="Class imbalance"
-        description="Balanced class weighting is used during federated training so minority diabetic retinopathy stages contribute more strongly to the loss."
-        actions={
-          <StatusBadge tone="warning">
-            Highest weight: {highestWeight.label}
-          </StatusBadge>
-        }
-      />
+          eyebrow="Evaluation"
+          title="Class imbalance"
+          description="Balanced class weighting is used during weighted federated training so minority diabetic retinopathy stages contribute more strongly to the loss."
+          actions={
+            <StatusBadge tone="warning">
+              Highest weight: {highestWeight.label}
+            </StatusBadge>
+          }
+        />
 
-      <ChartCard
-        title="Applied class weights"
-        subtitle="Weights calculated from datasets/train_1.csv using balanced class weighting"
-        footer="Higher weights are assigned to less frequent classes during local client training."
-      >
+        <ChartCard
+          title="Applied class weights"
+          subtitle="Weights calculated from datasets/train_1.csv using balanced class weighting"
+          footer="These weights are used in the weighted training configurations, including IID FedAvg and Non-IID weighted FedProx."
+        >
         <div className="space-y-4">
           {classWeights.map((c) => (
             <PerformanceBar
@@ -360,9 +579,9 @@ export function ClassImbalancePage() {
       </ChartCard>
 
       <ChartCard
-        title="Weighting strategy"
-        footer="These are the actual weights used by the current IID federated training pipeline."
-      >
+  title="Weighting strategy"
+  footer="These are the verified balanced class weights used during weighted local client training."
+>
         <div className="space-y-3 text-sm text-muted-foreground">
           <p>
             Method:{" "}
@@ -410,7 +629,7 @@ export function ModelImprovementPage() {
       <PageHeader
         eyebrow="Next steps"
         title="Model improvement plan"
-        description="Recommendations based on the verified IID FedAvg global model evaluation."
+        description="Recommendations derived from the verified evaluation results and the weakest diabetic retinopathy classes."
         actions={
           <StatusBadge tone="warning">
             {weakest
@@ -427,7 +646,11 @@ export function ModelImprovementPage() {
         />
 
         <MetricCard
-          label="Severe F1"
+          label={
+            weakest
+              ? `${weakest.label} F1`
+              : "Weakest class F1"
+          }
           value={
             weakest
               ? weakest.f1.toFixed(3)
@@ -436,7 +659,11 @@ export function ModelImprovementPage() {
         />
 
         <MetricCard
-          label="Severe precision"
+          label={
+            weakest
+              ? `${weakest.label} precision`
+              : "Weakest class precision"
+          }
           value={
             weakest
               ? weakest.precision.toFixed(3)
@@ -445,7 +672,11 @@ export function ModelImprovementPage() {
         />
 
         <MetricCard
-          label="Severe support"
+          label={
+            weakest
+              ? `${weakest.label} support`
+              : "Weakest class support"
+          }
           value={
             weakest
               ? weakest.support
@@ -457,7 +688,11 @@ export function ModelImprovementPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <ChartCard
           title="Primary weakness"
-          subtitle="Verified IID FedAvg evaluation"
+          subtitle={
+            weakest
+              ? weakest.label
+              : "Loading..."
+          }
         >
           {weakest ? (
             <div className="space-y-4">
@@ -488,7 +723,11 @@ export function ModelImprovementPage() {
 
         <ChartCard
           title="Secondary weak class"
-          subtitle="Proliferative DR"
+          subtitle={
+            secondary
+              ? secondary.label
+              : "Loading..."
+          }
         >
           {secondary ? (
             <div className="space-y-4">
