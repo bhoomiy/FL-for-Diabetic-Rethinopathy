@@ -17,7 +17,9 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     f1_score,
-    classification_report
+    classification_report,
+    precision_recall_fscore_support,
+    confusion_matrix
 )
 
 from fl.server import FLServer
@@ -140,6 +142,50 @@ def evaluate_global_model(
         zero_division=0
     )
 
+    # ==========================================
+    # Per-Class Metrics
+    # ==========================================
+
+    class_precision, class_recall, class_f1, class_support = (
+        precision_recall_fscore_support(
+            all_labels,
+            all_predictions,
+            labels=[0, 1, 2, 3, 4],
+            zero_division=0
+        )
+    )
+
+    class_names = [
+        "No DR",
+        "Mild",
+        "Moderate",
+        "Severe",
+        "Proliferative"
+    ]
+
+    class_metrics = []
+
+    for class_id, class_name in enumerate(class_names):
+        class_metrics.append({
+            "class_id": class_id,
+            "class_name": class_name,
+            "precision": float(class_precision[class_id]),
+            "recall": float(class_recall[class_id]),
+            "f1": float(class_f1[class_id]),
+            "support": int(class_support[class_id])
+        })
+
+
+    # ==========================================
+    # Confusion Matrix
+    # ==========================================
+
+    cm = confusion_matrix(
+        all_labels,
+        all_predictions,
+        labels=[0, 1, 2, 3, 4]
+    )
+
     print(
         f"\nValidation Loss: "
         f"{validation_loss:.4f}"
@@ -184,13 +230,15 @@ def evaluate_global_model(
     )
 
     return {
-        "val_loss": validation_loss,
-        "val_accuracy": accuracy * 100,
-        "precision": precision,
-        "recall": recall,
-        "macro_f1": macro_f1,
-        "weighted_f1": weighted_f1
-    }
+    "val_loss": validation_loss,
+    "val_accuracy": accuracy * 100,
+    "precision": precision,
+    "recall": recall,
+    "macro_f1": macro_f1,
+    "weighted_f1": weighted_f1,
+    "class_metrics": class_metrics,
+    "confusion_matrix": cm.tolist()
+}
 
 def calculate_class_weights():
 
@@ -376,6 +424,7 @@ def run_experiment(
 
     best_val_accuracy = -1.0
     best_round = 0
+    best_metrics = None
 
     for round_number in range(
         1,
@@ -417,6 +466,7 @@ def run_experiment(
         if current_val_accuracy > best_val_accuracy:
             best_val_accuracy = current_val_accuracy
             best_round = round_number
+            best_metrics = metrics
 
             best_model_path = (
                 experiment_dir / "best_global_model.pth"
@@ -502,6 +552,45 @@ def run_experiment(
         index=False
     )
     latest_result = results[-1]
+
+    # ==========================================
+    # Save Best-Round Evaluation Artifacts
+    # ==========================================
+
+    if best_metrics is not None:
+        class_metrics_file = (
+            experiment_dir / "class_metrics.json"
+        )
+
+        with open(class_metrics_file, "w") as f:
+            json.dump(
+                best_metrics["class_metrics"],
+                f,
+                indent=4
+            )
+
+        confusion_matrix_file = (
+            experiment_dir / "confusion_matrix.json"
+        )
+
+        with open(confusion_matrix_file, "w") as f:
+            json.dump(
+                {
+                    "matrix": best_metrics["confusion_matrix"]
+                },
+                f,
+                indent=4
+            )
+
+        print(
+            f"Class metrics saved as "
+            f"{class_metrics_file}"
+        )
+
+        print(
+            f"Confusion matrix saved as "
+            f"{confusion_matrix_file}"
+        )
 
     summary = {
         "experiment_id": experiment_id,

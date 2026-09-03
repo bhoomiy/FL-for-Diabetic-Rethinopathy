@@ -58,8 +58,10 @@ export async function fetchClassImbalance() {
 }
 
 // GET /model-improvement
-export async function fetchModelImprovement() {
-  return apiRequest("/model-improvement");
+export async function fetchModelImprovement(distribution = "iid") {
+  return apiRequest(
+    `/model-improvement?distribution=${distribution}`
+  );
 }
 
 // GET /model-performance

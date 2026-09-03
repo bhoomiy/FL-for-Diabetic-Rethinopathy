@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import pandas as pd
 from pathlib import Path
+import json
 
 from fl.fed_train import run_experiment
 
@@ -10,6 +11,76 @@ CORS(app)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 RESULTS_FILE = BASE_DIR / "results" / "fedprox_iid_results.csv"
+
+def get_best_experiment(
+    distribution=None,
+    algorithm=None,
+    required_file=None
+):
+    experiments_dir = BASE_DIR / "results" / "experiments"
+
+    if not experiments_dir.exists():
+        return None
+
+    best_experiment = None
+    best_accuracy = -1.0
+
+    for experiment_dir in experiments_dir.iterdir():
+        if not experiment_dir.is_dir():
+            continue
+
+        config_path = experiment_dir / "config.json"
+        summary_path = experiment_dir / "summary.json"
+
+        if not config_path.exists() or not summary_path.exists():
+            continue
+
+        if required_file is not None:
+            required_path = experiment_dir / required_file
+
+            if not required_path.exists():
+                continue
+
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+
+            with open(summary_path, "r", encoding="utf-8") as f:
+                summary = json.load(f)
+
+            if summary.get("status") != "completed":
+                continue
+
+            if distribution is not None:
+                if config.get("distribution") != distribution:
+                    continue
+
+            if algorithm is not None:
+                if config.get("algorithm") != algorithm:
+                    continue
+
+            accuracy = summary.get("best_val_accuracy")
+
+            if accuracy is None:
+                continue
+
+            accuracy = float(accuracy)
+
+            if accuracy > best_accuracy:
+                best_accuracy = accuracy
+                best_experiment = {
+                    "directory": experiment_dir,
+                    "config": config,
+                    "summary": summary
+                }
+
+        except Exception as error:
+            print(
+                f"Failed to inspect experiment "
+                f"{experiment_dir.name}: {error}"
+            )
+
+    return best_experiment
 
 
 @app.route("/api/dashboard", methods=["GET"])
@@ -131,160 +202,206 @@ def data_distribution():
 
 @app.route("/api/model-performance", methods=["GET"])
 def model_performance():
-    distribution = request.args.get("distribution", "iid").lower()
+    distribution = request.args.get(
+        "distribution",
+        "iid"
+    ).lower()
 
-    if distribution == "non_iid":
+    experiment = get_best_experiment(
+        distribution=distribution
+    )
+
+    if experiment is None:
         return jsonify({
-            "distribution": "non_iid",
-            "algorithm": "fedprox",
-            "validation_accuracy": 76.23,
-            "macro_precision": 0.5828,
-            "macro_recall": 0.6105,
-            "macro_f1": 0.5813,
-            "weighted_f1": 0.7539
-        })
+            "error": (
+                f"No completed experiment found "
+                f"for distribution '{distribution}'"
+            )
+        }), 404
+
+    experiment_dir = experiment["directory"]
+    config = experiment["config"]
+    summary = experiment["summary"]
+
+    history_path = (
+        experiment_dir / "training_history.csv"
+    )
+
+    if not history_path.exists():
+        return jsonify({
+            "error": "Training history not found."
+        }), 404
+
+    history_df = pd.read_csv(history_path)
+
+    best_round = summary.get("best_round")
+
+    best_row = history_df[
+        history_df["round"] == best_round
+    ]
+
+    if best_row.empty:
+        return jsonify({
+            "error": "Best round not found in training history."
+        }), 404
+
+    best_row = best_row.iloc[0]
 
     return jsonify({
-        "distribution": "iid",
-        "algorithm": "fedavg",
-        "validation_accuracy": 78.14,
-        "train_accuracy": 78.50,
-        "macro_precision": 0.6570,
-        "macro_recall": 0.6915,
-        "macro_f1": 0.6525,
-        "weighted_f1": 0.7854
+        "experiment_id": summary.get(
+            "experiment_id"
+        ),
+        "distribution": config.get(
+            "distribution"
+        ),
+        "algorithm": config.get(
+            "algorithm"
+        ),
+        "best_round": int(best_round),
+        "validation_accuracy": float(
+            best_row["val_accuracy"]
+        ),
+        "train_accuracy": float(
+            best_row["train_accuracy"]
+        ),
+        "macro_precision": float(
+            best_row["precision"]
+        ),
+        "macro_recall": float(
+            best_row["recall"]
+        ),
+        "macro_f1": float(
+            best_row["macro_f1"]
+        ),
+        "weighted_f1": float(
+            best_row["weighted_f1"]
+        )
     })
 
 @app.route("/api/class-metrics", methods=["GET"])
 def class_metrics():
-    distribution = request.args.get("distribution", "iid").lower()
+    distribution = request.args.get(
+        "distribution",
+        "iid"
+    ).lower()
 
-    if distribution == "non_iid":
-        return jsonify([
-            {
-                "key": "no_dr",
-                "label": "No DR",
-                "precision": 0.9657,
-                "recall": 0.9826,
-                "f1": 0.9741,
-                "support": 172
-            },
-            {
-                "key": "mild",
-                "label": "Mild",
-                "precision": 0.4789,
-                "recall": 0.8500,
-                "f1": 0.6126,
-                "support": 40
-            },
-            {
-                "key": "moderate",
-                "label": "Moderate",
-                "precision": 0.7160,
-                "recall": 0.5577,
-                "f1": 0.6270,
-                "support": 104
-            },
-            {
-                "key": "severe",
-                "label": "Severe",
-                "precision": 0.1818,
-                "recall": 0.0909,
-                "f1": 0.1212,
-                "support": 22
-            },
-            {
-                "key": "proliferative",
-                "label": "Proliferative DR",
-                "precision": 0.5714,
-                "recall": 0.5714,
-                "f1": 0.5714,
-                "support": 28
-            }
-        ])
+    experiment = get_best_experiment(
+        distribution=distribution,
+        required_file="class_metrics.json"
+    )
 
-    return jsonify([
-        {
-            "key": "no_dr",
-            "label": "No DR",
-            "precision": 0.9714,
-            "recall": 0.9884,
-            "f1": 0.9798,
-            "support": 172
-        },
-        {
-            "key": "mild",
-            "label": "Mild",
-            "precision": 0.5741,
-            "recall": 0.7750,
-            "f1": 0.6596,
-            "support": 40
-        },
-        {
-            "key": "moderate",
-            "label": "Moderate",
-            "precision": 0.8143,
-            "recall": 0.5481,
-            "f1": 0.6552,
-            "support": 104
-        },
-        {
-            "key": "severe",
-            "label": "Severe",
-            "precision": 0.3333,
-            "recall": 0.6818,
-            "f1": 0.4478,
-            "support": 22
-        },
-        {
-            "key": "proliferative",
-            "label": "Proliferative DR",
-            "precision": 0.5909,
-            "recall": 0.4643,
-            "f1": 0.5200,
-            "support": 28
-        }
-    ])
-@app.route("/api/confusion-matrix", methods=["GET"])
-def confusion_matrix_data():
-    distribution = request.args.get("distribution", "iid").lower()
-
-    labels = [
-        "No DR",
-        "Mild",
-        "Moderate",
-        "Severe",
-        "Proliferative DR"
-    ]
-
-    if distribution == "non_iid":
+    if experiment is None:
         return jsonify({
-            "distribution": "non_iid",
-            "labels": labels,
-            "matrix": [
-                [169, 3, 0, 0, 0],
-                [1, 34, 3, 1, 1],
-                [5, 29, 58, 7, 5],
-                [0, 2, 12, 2, 6],
-                [0, 3, 8, 1, 16]
-            ]
+            "error": (
+                f"No completed experiment with class metrics "
+                f"found for distribution '{distribution}'"
+            )
+        }), 404
+
+    experiment_dir = experiment["directory"]
+    summary = experiment["summary"]
+
+    class_metrics_path = (
+        experiment_dir / "class_metrics.json"
+    )
+
+    with open(
+        class_metrics_path,
+        "r",
+        encoding="utf-8"
+    ) as f:
+        raw_metrics = json.load(f)
+
+    key_map = {
+        0: "no_dr",
+        1: "mild",
+        2: "moderate",
+        3: "severe",
+        4: "proliferative"
+    }
+
+    formatted_metrics = []
+
+    for metric in raw_metrics:
+        class_id = int(metric["class_id"])
+
+        formatted_metrics.append({
+            "key": key_map[class_id],
+            "label": metric["class_name"],
+            "precision": float(metric["precision"]),
+            "recall": float(metric["recall"]),
+            "f1": float(metric["f1"]),
+            "support": int(metric["support"])
         })
 
+    return jsonify(formatted_metrics)
+
+
+@app.route("/api/confusion-matrix", methods=["GET"])
+def confusion_matrix_data():
+    distribution = request.args.get(
+        "distribution",
+        "iid"
+    ).lower()
+
+    experiment = get_best_experiment(
+    distribution=distribution,
+    required_file="confusion_matrix.json"
+)
+
+    if experiment is None:
+        return jsonify({
+            "error": (
+                f"No completed experiment found "
+                f"for distribution '{distribution}'"
+            )
+        }), 404
+
+    experiment_dir = experiment["directory"]
+    summary = experiment["summary"]
+    config = experiment["config"]
+
+    confusion_matrix_path = (
+        experiment_dir / "confusion_matrix.json"
+    )
+
+    if not confusion_matrix_path.exists():
+        return jsonify({
+            "error": (
+                "Confusion matrix is not available for this "
+                "experiment because it was trained before "
+                "per-experiment evaluation artifacts were added."
+            ),
+            "experiment_id": summary.get("experiment_id")
+        }), 404
+
+    with open(
+        confusion_matrix_path,
+        "r",
+        encoding="utf-8"
+    ) as f:
+        confusion_data = json.load(f)
+
     return jsonify({
-        "distribution": "iid",
-        "labels": labels,
-        "matrix": [
-            [170, 2, 0, 0, 0],
-            [1, 31, 5, 1, 2],
-            [4, 17, 57, 22, 4],
-            [0, 2, 2, 15, 3],
-            [0, 2, 6, 7, 13]
-        ]
+        "experiment_id": summary.get("experiment_id"),
+        "distribution": config.get("distribution"),
+        "algorithm": config.get("algorithm"),
+        "best_round": summary.get("best_round"),
+        "labels": [
+            "No DR",
+            "Mild",
+            "Moderate",
+            "Severe",
+            "Proliferative DR"
+        ],
+        "matrix": confusion_data["matrix"]
     })
 
 @app.route("/api/class-imbalance", methods=["GET"])
 def class_imbalance():
     return jsonify({
+        "method": "Balanced class weighting",
+        "source": "datasets/train_1.csv",
         "class_weights": [
             {
                 "key": "no_dr",
@@ -311,48 +428,124 @@ def class_imbalance():
                 "label": "Proliferative DR",
                 "weight": 2.5043
             }
-        ],
-        "method": "Balanced class weighting",
-        "source": "datasets/train_1.csv"
+        ]
     })
+
 
 @app.route("/api/model-improvement", methods=["GET"])
 def model_improvement():
+    distribution = request.args.get(
+        "distribution",
+        "iid"
+    ).lower()
+
+    experiment = get_best_experiment(
+    distribution=distribution,
+    required_file="class_metrics.json"
+    )
+
+    if experiment is None:
+        return jsonify({
+            "error": (
+                f"No completed experiment found "
+                f"for distribution '{distribution}'"
+            )
+        }), 404
+
+    experiment_dir = experiment["directory"]
+    summary = experiment["summary"]
+    config = experiment["config"]
+
+    class_metrics_path = (
+        experiment_dir / "class_metrics.json"
+    )
+
+    if not class_metrics_path.exists():
+        return jsonify({
+            "error": (
+                "Class metrics are not available for this "
+                "experiment."
+            ),
+            "experiment_id": summary.get("experiment_id")
+        }), 404
+
+    with open(
+        class_metrics_path,
+        "r",
+        encoding="utf-8"
+    ) as f:
+        class_metrics = json.load(f)
+
+    sorted_classes = sorted(
+        class_metrics,
+        key=lambda item: item["f1"]
+    )
+
+    weakest = sorted_classes[0]
+    secondary = sorted_classes[1]
+
+    def format_class(metric):
+        return {
+            "label": metric["class_name"],
+            "precision": float(metric["precision"]),
+            "recall": float(metric["recall"]),
+            "f1": float(metric["f1"]),
+            "support": int(metric["support"])
+        }
+
+    recommendations = [
+        {
+            "title": (
+                f"Increase {weakest['class_name']}-class training data"
+            ),
+            "text": (
+                f"{weakest['class_name']} currently has the lowest "
+                f"F1 score ({weakest['f1']:.3f}). Increasing the "
+                "amount and diversity of representative training "
+                "data for this class may improve performance."
+            )
+        },
+        {
+            "title": "Target minority-class augmentation",
+            "text": (
+                f"Apply clinically appropriate augmentation to "
+                f"{weakest['class_name']} and "
+                f"{secondary['class_name']} samples to increase "
+                "variation during local training."
+            )
+        },
+        {
+            "title": (
+                f"Investigate {weakest['class_name']} classification errors"
+            ),
+            "text": (
+                f"Review false positives and false negatives for "
+                f"{weakest['class_name']}. Its precision is "
+                f"{weakest['precision']:.3f} and recall is "
+                f"{weakest['recall']:.3f}, which can help identify "
+                "the dominant error pattern."
+            )
+        },
+        {
+            "title": "Evaluate alternative loss functions",
+            "text": (
+                "Compare the current loss configuration with "
+                "alternatives such as focal loss in a future "
+                "experiment, especially for difficult or "
+                "under-represented classes."
+            )
+        }
+    ]
+
     return jsonify({
-        "weakest_class": {
-            "label": "Severe",
-            "precision": 0.3333333333333333,
-            "recall": 0.6818181818181818,
-            "f1": 0.44776119402985076,
-            "support": 22
-        },
+        "experiment_id": summary.get("experiment_id"),
+        "distribution": config.get("distribution"),
+        "algorithm": config.get("algorithm"),
+        "best_round": summary.get("best_round"),
 
-        "secondary_weak_class": {
-            "label": "Proliferative DR",
-            "precision": 0.5909090909090909,
-            "recall": 0.4642857142857143,
-            "f1": 0.52,
-            "support": 28
-        },
-
-        "recommendations": [
-            {
-                "title": "Increase Severe-class training data",
-                "text": "The Severe class has the lowest F1 score and only 22 samples in the validation set. More representative Severe-stage data may improve generalisation."
-            },
-            {
-                "title": "Target minority-class augmentation",
-                "text": "Apply clinically appropriate augmentation to Severe and Proliferative DR samples to increase minority-class variation during local training."
-            },
-            {
-                "title": "Investigate Severe false positives",
-                "text": "Severe recall is relatively strong but precision is low, which means the model frequently predicts Severe for images belonging to other classes."
-            },
-            {
-                "title": "Evaluate focal loss",
-                "text": "Weighted cross-entropy is already being used. Focal loss can be evaluated in a future experiment to place more emphasis on difficult and minority examples."
-            }
-        ]
+        "weakest_class": format_class(weakest),
+        "secondary_weak_class": format_class(secondary),
+        "recommendations": recommendations
     })
 
 @app.route("/api/experiments/start", methods=["POST"])
