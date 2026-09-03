@@ -4,6 +4,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.utils.class_weight import compute_class_weight
 import numpy as np
+import json
+from pathlib import Path
+from datetime import datetime
 
 from sklearn.metrics import (
     accuracy_score,
@@ -32,7 +35,7 @@ BATCH_SIZE = 32
 # None = use the ENTIRE client dataset
 MAX_BATCHES = None
 
-MU = 0.01
+MU = 0.00
 
 # ==========================================
 # Global Validation
@@ -207,58 +210,139 @@ def calculate_class_weights():
     )
 
 # ==========================================
-# Main
+# Experiment Runner
 # ==========================================
 
-def main():
+def run_experiment(
+    distribution="iid",
+    algorithm="fedavg",
+    rounds=1,
+    local_epochs=1,
+    batch_size=32,
+    learning_rate=0.0005,
+    mu=0.01,
+    use_class_weights=True,
+    max_batches=2,
+    test_run=True
+):
+
+    num_clients = 4
+    distribution = distribution.lower()
+    algorithm = algorithm.lower()
+
+    if distribution == "iid":
+        client_folder = "clients"
+    elif distribution == "non_iid":
+        client_folder = "clients_non_iid"
+    else:
+        raise ValueError("distribution must be 'iid' or 'non_iid'")
+
+    if algorithm == "fedavg":
+        experiment_mu = 0.0
+    elif algorithm == "fedprox":
+        if mu <= 0:
+            raise ValueError("FedProx requires mu > 0")
+        experiment_mu = mu
+    else:
+        raise ValueError("algorithm must be 'fedavg' or 'fedprox'")
+
+    experiment_name = f"{algorithm}_{distribution}"
+    base_dir = Path(__file__).resolve().parent.parent
+
+    if test_run:
+        run_folder = "test_runs"
+    else:
+        run_folder = "experiments"
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    experiment_id = f"{timestamp}_{experiment_name}"
+
+    experiment_dir = (
+        base_dir
+        / "results"
+        / run_folder
+        / experiment_id
+    )
+
+    experiment_dir.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    config = {
+    "experiment_id": experiment_id,
+    "distribution": distribution,
+    "algorithm": algorithm,
+    "num_clients": num_clients,
+    "rounds": rounds,
+    "local_epochs": local_epochs,
+    "batch_size": batch_size,
+    "learning_rate": learning_rate,
+    "mu": experiment_mu,
+    "use_class_weights": use_class_weights,
+    "max_batches": max_batches,
+    "test_run": test_run
+    }
+
+    config_file = experiment_dir / "config.json"
+
+    with open(config_file, "w") as f:
+        json.dump(config, f, indent=4)
+
+    print(f"\nExperiment ID: {experiment_id}")
+    print(f"Experiment folder: {experiment_dir}")
+
 
     print("=" * 60)
-    print("FEDERATED LEARNING - IID FEDPROX")
+    print("FEDERATED LEARNING EXPERIMENT")
     print("=" * 60)
 
-    print(
-        f"Number of clients : {NUM_CLIENTS}"
-    )
-
-    print(
-        f"Number of rounds  : {NUM_ROUNDS}"
-    )
-
-    print(
-        f"Local epochs      : {LOCAL_EPOCHS}"
-    )
-
-    print(
-        f"Batch size        : {BATCH_SIZE}"
-    )
-
-    print(
-        f"Max batches       : {MAX_BATCHES}"
-    )
+    print(f"Distribution      : {distribution.upper()}")
+    print(f"Algorithm         : {algorithm.upper()}")
+    print(f"Number of clients : {num_clients}")
+    print(f"Number of rounds  : {rounds}")
+    print(f"Local epochs      : {local_epochs}")
+    print(f"Batch size        : {batch_size}")
+    print(f"Learning rate     : {learning_rate}")
+    print(f"Max batches       : {max_batches}")
+    print(f"Mu                : {experiment_mu}")
+    print(f"Class weighting   : {use_class_weights}")
 
     # ==========================================
     # Validation Data
     # ==========================================
 
     _, val_loader = get_dataloaders(
-        batch_size=BATCH_SIZE
+        batch_size=batch_size
     )
 
-    class_weights = calculate_class_weights()
+    if use_class_weights:
+        class_weights = calculate_class_weights()
 
-    print("\nClass weights:")
-    print(class_weights)
+        print("\nClass weights:")
+        print(class_weights)
+
+    else:
+        class_weights = None
+
+        print("\nClass weighting disabled.")
+
+
 
     # ==========================================
     # Create Server
     # ==========================================
 
     server = FLServer(
-        num_clients=NUM_CLIENTS,
-        local_epochs=LOCAL_EPOCHS,
-        max_batches=MAX_BATCHES,
-        class_weights=class_weights,
-        mu=MU
+    num_clients=num_clients,
+    local_epochs=local_epochs,
+    batch_size=batch_size,
+    learning_rate=learning_rate,
+    max_batches=max_batches,
+    class_weights=class_weights,
+    mu=experiment_mu,
+    client_folder=client_folder
     )
 
     # ==========================================
@@ -286,9 +370,12 @@ def main():
     # Federated Rounds
     # ==========================================
 
+    best_val_accuracy = -1.0
+    best_round = 0
+
     for round_number in range(
         1,
-        NUM_ROUNDS + 1
+        rounds + 1
     ):
 
         print("\n")
@@ -296,7 +383,7 @@ def main():
 
         print(
             f"FEDERATED ROUND "
-            f"{round_number}/{NUM_ROUNDS}"
+            f"{round_number}/{rounds}"
         )
 
         print("=" * 60)
@@ -320,6 +407,27 @@ def main():
             val_loader,
             server.device
         )
+
+        current_val_accuracy = metrics["val_accuracy"]
+
+        if current_val_accuracy > best_val_accuracy:
+            best_val_accuracy = current_val_accuracy
+            best_round = round_number
+
+            best_model_path = (
+                experiment_dir / "best_global_model.pth"
+            )
+
+            torch.save(
+                global_model.state_dict(),
+                best_model_path
+            )
+
+            print(
+                f"\nNew best global model saved "
+                f"(Round {round_number}, "
+                f"Val Accuracy: {current_val_accuracy:.2f}%)"
+            )
 
         # ==========================================
         # Store Round Results
@@ -346,8 +454,8 @@ def main():
         # ==========================================
 
         model_path = (
-            f"fedprox_global_model_round_"
-            f"{round_number}.pth"
+            experiment_dir
+            / f"global_model_round_{round_number}.pth"
         )
 
         torch.save(
@@ -383,14 +491,44 @@ def main():
     # Save Results
     # ==========================================
 
+    results_file = experiment_dir / "training_history.csv"
+
     results_df.to_csv(
-        "fedprox_iid_results.csv",
+        results_file,
         index=False
     )
+    latest_result = results[-1]
+
+    summary = {
+        "experiment_id": experiment_id,
+        "distribution": distribution,
+        "algorithm": algorithm,
+        "num_clients": num_clients,
+        "rounds": rounds,
+        "local_epochs": local_epochs,
+        "batch_size": batch_size,
+        "learning_rate": learning_rate,
+        "mu": experiment_mu,
+        "use_class_weights": use_class_weights,
+        "final_train_accuracy": latest_result["train_accuracy"],
+        "final_val_accuracy": latest_result["val_accuracy"],
+        "final_macro_f1": latest_result["macro_f1"],
+        "final_weighted_f1": latest_result["weighted_f1"],
+        "best_val_accuracy": best_val_accuracy,
+        "best_round": best_round,
+        "status": "completed",
+        "test_run": test_run
+    }
+
+    summary_file = experiment_dir / "summary.json"
+
+    with open(summary_file, "w") as f:
+        json.dump(summary, f, indent=4)
+
+    print(f"Summary saved as {summary_file}")
 
     print(
-        "\nResults saved as "
-        "fedprox_iid_results.csv"
+        f"\nResults saved as {results_file}"
     )
 
     # ==========================================
@@ -424,8 +562,7 @@ def main():
     plt.tight_layout()
 
     plt.savefig(
-        "fedprox_iid_accuracy.png",
-        dpi=300
+        experiment_dir / "accuracy.png"
     )
 
     plt.close()
@@ -461,8 +598,7 @@ def main():
     plt.tight_layout()
 
     plt.savefig(
-        "fedprox_iid_loss.png",
-        dpi=300
+        experiment_dir / "loss.png"
     )
 
     plt.close()
@@ -498,31 +634,30 @@ def main():
     plt.tight_layout()
 
     plt.savefig(
-        "fedprox_iid_f1.png",
-        dpi=300
+        experiment_dir / "f1.png"
     )
 
     plt.close()
 
-    print(
-        "\nGraphs generated:"
-    )
-
-    print(
-        "fedprox_iid_accuracy.png"
-    )
-
-    print(
-        "fedprox_iid_loss.png"
-    )
-
-    print(
-        "fedprox_iid_f1.png"
-    )
+    print("\nGraphs generated:")
+    print(experiment_dir / "accuracy.png")
+    print(experiment_dir / "loss.png")
+    print(experiment_dir / "f1.png")
 
     print(
         "\nFederated Learning completed."
     )
+
+    return {
+    "experiment_id": experiment_id,
+    "status": "completed",
+    "experiment_dir": str(experiment_dir),
+    "best_round": best_round,
+    "best_val_accuracy": best_val_accuracy,
+    "final_val_accuracy": latest_result["val_accuracy"],
+    "final_macro_f1": latest_result["macro_f1"],
+    "final_weighted_f1": latest_result["weighted_f1"]
+}
 
 
 # ==========================================
@@ -530,4 +665,4 @@ def main():
 # ==========================================
 
 if __name__ == "__main__":
-    main()
+    run_experiment()

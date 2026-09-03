@@ -24,7 +24,7 @@ model = DRMobileNetV2(
 
 model.load_state_dict(
     torch.load(
-        "best_model.pth",
+        "model_paths/fedprox_global_model_round_5.pth",
         map_location=device
     )
 )
@@ -79,12 +79,31 @@ print(
     )
 )
 
+report = classification_report(
+    true_labels,
+    pred_labels,
+    target_names=class_names,
+    output_dict=True
+)
+
+print("\nClass-wise Metrics")
+
+for class_name in class_names:
+    print(
+        class_name,
+        report[class_name]["precision"],
+        report[class_name]["recall"],
+        report[class_name]["f1-score"],
+        report[class_name]["support"]
+    )
+
 
 # Confusion Matrix
 cm = confusion_matrix(
     true_labels,
     pred_labels
 )
+print(cm)
 
 plt.figure(figsize=(8,6))
 
@@ -103,6 +122,6 @@ plt.title("Confusion Matrix")
 
 plt.tight_layout()
 
-plt.savefig("confusion_matrix.png")
+plt.savefig("results/confusion_matrix_iid_fedavg.png")
 
 plt.show()

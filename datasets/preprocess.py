@@ -22,30 +22,16 @@ VAL_CSV = CSV_DIR / "valid.csv"
 TEST_CSV = CSV_DIR / "test.csv"
 
 # Actual image dataset is stored outside the GitHub repository
+
 DATASET_DIR = Path(
-    r"C:\Users\Administrator\Documents\GitHub\DR-Dataset"
+    r"C:\Users\RADHAGOPINATH\Downloads\FL-for-Diabetic-Rethinopathy\datasets"
 )
 
-TRAIN_IMAGE_DIR = (
-    DATASET_DIR
-    / "images"
-    / "train_images"
-    / "train_images"
-)
+TRAIN_IMAGE_DIR = DATASET_DIR / "train_images" / "train_images"
 
-VAL_IMAGE_DIR = (
-    DATASET_DIR
-    / "images"
-    / "val_images"
-    / "val_images"
-)
+VAL_IMAGE_DIR = DATASET_DIR / "val_images" / "val_images"
 
-TEST_IMAGE_DIR = (
-    DATASET_DIR
-    / "images"
-    / "test_images"
-    / "test_images"
-)
+TEST_IMAGE_DIR = DATASET_DIR / "test_images" / "test_images"
 
 # ======================================================
 # Image Transforms

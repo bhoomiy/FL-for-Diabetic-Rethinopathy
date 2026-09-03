@@ -9,17 +9,21 @@ from fl.client import FLClient
 class FLServer:
 
     def __init__(
-        self,
-        num_clients=4,
-        local_epochs=1,
-        max_batches=None,
-        class_weights=None,
-        mu=0.0,
-        client_folder="clients"
+    self,
+    num_clients=4,
+    local_epochs=1,
+    batch_size=32,
+    learning_rate=0.0005,
+    max_batches=None,
+    class_weights=None,
+    mu=0.0,
+    client_folder="clients"
     ):
 
         self.num_clients = num_clients
         self.local_epochs = local_epochs
+        self.batch_size = batch_size
+        self.learning_rate = learning_rate
         self.max_batches = max_batches
         self.class_weights = class_weights
         self.mu = mu
@@ -53,7 +57,8 @@ class FLServer:
         self.clients = [
             FLClient(
                 client_id=i,
-                batch_size=32,
+                batch_size=batch_size,
+                learning_rate=learning_rate,
                 local_epochs=local_epochs,
                 max_batches=max_batches,
                 class_weights=class_weights,
