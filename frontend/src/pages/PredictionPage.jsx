@@ -33,22 +33,44 @@ export default function PredictionPage() {
   };
 
   const analyse = async () => {
-    if (!file) {
-      setError("Please choose a retinal fundus image.");
-      return;
-    }
+  if (!file) {
+    setError("Please choose a retinal fundus image.");
+    return;
+  }
+
+  try {
     setLoading(true);
-    setResult(await predictImage(file));
+    setError("");
+
+    const prediction = await predictImage(file);
+
+    setResult(prediction);
+  } catch (error) {
+    console.error("Prediction failed:", error);
+
+    setError(
+      error.message || "Prediction failed. Please try again."
+    );
+
+    setResult(null);
+  } finally {
     setLoading(false);
-  };
+  }
+};
 
   return (
     <div className="space-y-6">
       <PageHeader eyebrow="Tools" title="Retinal image prediction"
         description="Run a single fundus image against the current global federated model."
-        actions={<StatusBadge tone="warning">Simulated inference</StatusBadge>} />
+        actions={
+  <StatusBadge tone="success">
+    Global model inference
+  </StatusBadge>
+}>
+
+</PageHeader>
       <div className="grid gap-6 lg:grid-cols-2">
-        <ChartCard title="Upload fundus image" subtitle="The image is processed locally in your browser for this demo">
+        <ChartCard title="Upload fundus image" subtitle="The image is securely processed by the federated model inference service">
           <FileUploader file={file} previewUrl={previewUrl} onFileSelected={onFileSelected} onClear={clear} error={error} />
           <div className="mt-5 flex flex-wrap gap-2">
             <Button onClick={analyse} disabled={loading || !file}>

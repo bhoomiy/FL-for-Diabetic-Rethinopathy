@@ -3,6 +3,8 @@ from flask_cors import CORS
 import pandas as pd
 from pathlib import Path
 import json
+from PIL import Image
+from backend.prediction_service import predict_retinal_image
 
 from fl.fed_train import run_experiment
 
@@ -82,6 +84,63 @@ def get_best_experiment(
 
     return best_experiment
 
+def get_experiment_by_id(experiment_id):
+    if not experiment_id:
+        return None
+
+    experiments_dir = (
+        BASE_DIR / "results" / "experiments"
+    )
+
+    experiment_dir = (
+        experiments_dir / experiment_id
+    ).resolve()
+
+    experiments_dir = experiments_dir.resolve()
+
+    # Prevent accessing anything outside
+    # results/experiments.
+    if experiment_dir.parent != experiments_dir:
+        return None
+
+    if not experiment_dir.is_dir():
+        return None
+
+    config_path = experiment_dir / "config.json"
+    summary_path = experiment_dir / "summary.json"
+
+    if not config_path.exists() or not summary_path.exists():
+        return None
+
+    try:
+        with open(
+            config_path,
+            "r",
+            encoding="utf-8"
+        ) as f:
+            config = json.load(f)
+
+        with open(
+            summary_path,
+            "r",
+            encoding="utf-8"
+        ) as f:
+            summary = json.load(f)
+
+        return {
+            "directory": experiment_dir,
+            "config": config,
+            "summary": summary
+        }
+
+    except Exception as error:
+        print(
+            f"Failed to load experiment "
+            f"{experiment_id}: {error}"
+        )
+
+        return None
+
 
 @app.route("/api/dashboard", methods=["GET"])
 def dashboard():
@@ -102,7 +161,47 @@ def dashboard():
 
 @app.route("/api/training-history", methods=["GET"])
 def training_history():
-    df = pd.read_csv(RESULTS_FILE)
+    distribution = request.args.get(
+        "distribution",
+        "iid"
+    ).lower()
+    experiment_id = request.args.get("experiment_id")
+
+    if experiment_id:
+        experiment = get_experiment_by_id(experiment_id)
+
+        if (
+            experiment is not None
+            and not (
+                experiment["directory"]
+                / "training_history.csv"
+            ).exists()
+        ):
+            experiment = None
+
+    else:
+        experiment = get_best_experiment(
+            distribution=distribution,
+            required_file="training_history.csv"
+    )
+
+    if experiment is None:
+        return jsonify({
+            "error": (
+                f"No completed experiment with training history "
+                f"found for distribution '{distribution}'"
+            )
+        }), 404
+
+    experiment_dir = experiment["directory"]
+    summary = experiment["summary"]
+    config = experiment["config"]
+
+    history_path = (
+        experiment_dir / "training_history.csv"
+    )
+
+    df = pd.read_csv(history_path)
 
     history = []
 
@@ -116,7 +215,13 @@ def training_history():
             "macroF1": float(row["macro_f1"])
         })
 
-    return jsonify(history)
+    return jsonify({
+        "experiment_id": summary.get("experiment_id"),
+        "distribution": config.get("distribution"),
+        "algorithm": config.get("algorithm"),
+        "best_round": summary.get("best_round"),
+        "history": history
+    })
 
 @app.route("/api/clients", methods=["GET"])
 def clients():
@@ -207,9 +312,15 @@ def model_performance():
         "iid"
     ).lower()
 
-    experiment = get_best_experiment(
-        distribution=distribution
-    )
+    experiment_id = request.args.get("experiment_id")
+
+    if experiment_id:
+        experiment = get_experiment_by_id(experiment_id)
+    else:
+        experiment = get_best_experiment(
+            distribution=distribution,
+            required_file="training_history.csv"
+        )
 
     if experiment is None:
         return jsonify({
@@ -285,10 +396,25 @@ def class_metrics():
         "iid"
     ).lower()
 
-    experiment = get_best_experiment(
-        distribution=distribution,
-        required_file="class_metrics.json"
-    )
+    experiment_id = request.args.get("experiment_id")
+
+    if experiment_id:
+        experiment = get_experiment_by_id(experiment_id)
+
+        if (
+            experiment is not None
+            and not (
+                experiment["directory"]
+                / "class_metrics.json"
+            ).exists()
+        ):
+            experiment = None
+
+    else:
+        experiment = get_best_experiment(
+            distribution=distribution,
+            required_file="class_metrics.json"
+        )
 
     if experiment is None:
         return jsonify({
@@ -344,10 +470,25 @@ def confusion_matrix_data():
         "iid"
     ).lower()
 
-    experiment = get_best_experiment(
-    distribution=distribution,
-    required_file="confusion_matrix.json"
-)
+    experiment_id = request.args.get("experiment_id")
+
+    if experiment_id:
+        experiment = get_experiment_by_id(experiment_id)
+
+        if (
+            experiment is not None
+            and not (
+                experiment["directory"]
+                / "confusion_matrix.json"
+            ).exists()
+        ):
+            experiment = None
+
+    else:
+        experiment = get_best_experiment(
+            distribution=distribution,
+            required_file="confusion_matrix.json"
+        )
 
     if experiment is None:
         return jsonify({
@@ -439,10 +580,25 @@ def model_improvement():
         "iid"
     ).lower()
 
-    experiment = get_best_experiment(
-    distribution=distribution,
-    required_file="class_metrics.json"
-    )
+    experiment_id = request.args.get("experiment_id")
+
+    if experiment_id:
+        experiment = get_experiment_by_id(experiment_id)
+
+        if (
+            experiment is not None
+            and not (
+                experiment["directory"]
+                / "class_metrics.json"
+            ).exists()
+        ):
+            experiment = None
+
+    else:
+        experiment = get_best_experiment(
+            distribution=distribution,
+            required_file="class_metrics.json"
+        )
 
     if experiment is None:
         return jsonify({
@@ -672,6 +828,35 @@ def get_experiments():
     )
 
     return jsonify(experiments)
+
+@app.route("/api/predict", methods=["POST"])
+def predict():
+
+    if "image" not in request.files:
+        return jsonify({
+            "error": "No image file provided."
+        }), 400
+
+    image_file = request.files["image"]
+
+    if image_file.filename == "":
+        return jsonify({
+            "error": "No image selected."
+        }), 400
+
+    try:
+        image = Image.open(image_file.stream)
+
+        result = predict_retinal_image(image)
+
+        return jsonify(result)
+
+    except Exception as error:
+        print("Prediction failed:", error)
+
+        return jsonify({
+            "error": str(error)
+        }), 500
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)

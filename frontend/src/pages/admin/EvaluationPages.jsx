@@ -6,7 +6,6 @@ import PerformanceBar from "@/components/charts/PerformanceBar";
 import ConfusionMatrixTable from "@/components/federated/ConfusionMatrixTable";
 import AccuracyLineChart from "@/components/charts/AccuracyLineChart";
 import { CLASS_METRICS,  GLOBAL_METRICS,  getWeakestClass } from "@/data/metrics";
-import { EXPERIMENTS } from "@/data/experiments";
 import { percent } from "@/components/charts/chartTheme";
 import { useEffect, useState } from "react";
 import {
@@ -17,11 +16,28 @@ import {
   fetchClassImbalance,
   fetchModelImprovement,
 } from "@/services/federatedService";
+import { fetchExperiments } from "@/services/experimentService";
 
 export function ModelPerformancePage() {
   const [distribution, setDistribution] = useState("iid");
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [trainingHistory, setTrainingHistory] = useState([]);
+
+  useEffect(() => {
+  setTrainingHistory([]);
+
+  fetchTrainingHistory(distribution)
+    .then((data) => {
+      setTrainingHistory(data.history ?? []);
+    })
+    .catch((error) => {
+      console.error(
+        "Failed to fetch training history:",
+        error
+      );
+    });
+}, [distribution]);
 
   useEffect(() => {
     setLoading(true);
@@ -213,6 +229,32 @@ export function ModelPerformancePage() {
           </p>
         )}
       </ChartCard>
+      <ChartCard
+  title="Accuracy across communication rounds"
+  subtitle={`${isIID ? "IID" : "Non-IID"} · ${algorithmLabel}`}
+  footer={
+    metrics
+      ? `Round-wise training and validation accuracy from experiment ${metrics.experiment_id}.`
+      : "Loading experiment history..."
+  }
+>
+  <AccuracyLineChart
+    data={trainingHistory}
+    height={300}
+    series={[
+      {
+        dataKey: "trainAcc",
+        name: "Training",
+        color: "var(--color-chart-1)",
+      },
+      {
+        dataKey: "valAcc",
+        name: "Validation",
+        color: "var(--color-chart-2)",
+      },
+    ]}
+  />
+</ChartCard>
     </div>
   );
 }
@@ -893,28 +935,80 @@ const algorithmLabel =
 }
 
 export function ExperimentHistoryPage() {
+  const [experiments, setExperiments] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchExperiments()
+      .then((data) => {
+        setExperiments(data);
+      })
+      .catch((error) => {
+        console.error("Failed to fetch experiments:", error);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
+
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Research log" title="Experiment history"
-        description="Chronological record of every federated run in this project." />
+      <PageHeader
+        eyebrow="Research log"
+        title="Experiment history"
+        description="Chronological record of every federated run in this project."
+      />
+
       <ChartCard title="Timeline">
-        <ol className="relative space-y-6 border-l border-border pl-6">
-          {EXPERIMENTS.map((e) => (
-            <li key={e.id}>
-              <span className={`absolute -left-[5px] mt-1.5 size-2.5 rounded-full ${e.confirmed ? "bg-success" : "bg-muted-foreground"}`} aria-hidden="true" />
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-semibold text-foreground">{e.id}</p>
-                <StatusBadge tone={e.status === "Completed" ? "success" : "warning"}>{e.status}</StatusBadge>
-                <span className="text-xs text-muted-foreground">{e.date}</span>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {e.algorithm} · {e.distribution} · {e.aggregation} · {e.rounds} rounds ·{" "}
-                {e.accuracy != null ? `${percent(e.accuracy)} validation accuracy` : "Accuracy not recorded"}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">{e.notes}</p>
-            </li>
-          ))}
-        </ol>
+        {loading ? (
+          <p className="text-sm text-muted-foreground">
+            Loading experiments...
+          </p>
+        ) : experiments.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No completed experiments found.
+          </p>
+        ) : (
+          <ol className="relative space-y-6 border-l border-border pl-6">
+            {experiments.map((e) => (
+              <li key={e.id}>
+                <span
+                  className="absolute -left-[5px] mt-1.5 size-2.5 rounded-full bg-success"
+                  aria-hidden="true"
+                />
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-semibold text-foreground">
+                    {e.id}
+                  </p>
+
+                  <StatusBadge tone="success">
+                    Completed
+                  </StatusBadge>
+                </div>
+
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {e.algorithm} · {e.distribution} ·{" "}
+                  {e.rounds} rounds ·{" "}
+                 {e.accuracy != null
+                  ? `${e.accuracy.toFixed(2)}% validation accuracy`
+                  : "Accuracy not recorded"}
+                </p>
+
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Macro F1:{" "}
+                  {e.macroF1 != null
+                    ? e.macroF1.toFixed(4)
+                    : "Not recorded"}{" "}
+                  · Weighted F1:{" "}
+                  {e.weightedF1 != null
+                    ? e.weightedF1.toFixed(4)
+                    : "Not recorded"}
+                </p>
+              </li>
+            ))}
+          </ol>
+        )}
       </ChartCard>
     </div>
   );

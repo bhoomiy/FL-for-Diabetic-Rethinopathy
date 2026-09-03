@@ -41,8 +41,10 @@ export async function fetchDashboard() {
 }
 
 // GET /training-history
-export async function fetchTrainingHistory() {
-  return apiRequest("/training-history");
+export async function fetchTrainingHistory(distribution = "iid") {
+  return apiRequest(
+    `/training-history?distribution=${distribution}`
+  );
 }
 
 // GET /data-distribution
