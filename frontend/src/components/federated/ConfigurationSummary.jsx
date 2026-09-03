@@ -35,7 +35,7 @@ export default function ConfigurationSummary({ config, title = "Current best con
         {showAccuracy ? (
           <Row
             label="Validation accuracy"
-            value={config.validationAccuracy != null ? percent(config.validationAccuracy) : "Not available"}
+            value={config.validationAccuracy != null ? `${config.validationAccuracy.toFixed(2)}%` : "Not available"}
           />
         ) : null}
       </dl>

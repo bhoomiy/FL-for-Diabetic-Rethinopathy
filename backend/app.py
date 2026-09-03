@@ -144,19 +144,130 @@ def get_experiment_by_id(experiment_id):
 
 @app.route("/api/dashboard", methods=["GET"])
 def dashboard():
-    df = pd.read_csv(RESULTS_FILE)
 
-    latest = df.iloc[-1]
+    experiments_dir = (
+        BASE_DIR
+        / "results"
+        / "experiments"
+    )
+
+    if not experiments_dir.exists():
+        return jsonify({
+            "error": "No experiments found."
+        }), 404
+
+    completed_experiments = []
+
+    for experiment_dir in experiments_dir.iterdir():
+
+        if not experiment_dir.is_dir():
+            continue
+
+        summary_path = (
+            experiment_dir / "summary.json"
+        )
+
+        config_path = (
+            experiment_dir / "config.json"
+        )
+
+        if (
+            not summary_path.exists()
+            or not config_path.exists()
+        ):
+            continue
+
+        try:
+            with open(
+                summary_path,
+                "r",
+                encoding="utf-8"
+            ) as f:
+                summary = json.load(f)
+
+            with open(
+                config_path,
+                "r",
+                encoding="utf-8"
+            ) as f:
+                config = json.load(f)
+
+            if summary.get("status") != "completed":
+                continue
+
+            completed_experiments.append({
+                "directory": experiment_dir,
+                "summary": summary,
+                "config": config
+            })
+
+        except Exception as error:
+            print(
+                f"Failed to read {experiment_dir.name}:",
+                error
+            )
+
+    if not completed_experiments:
+        return jsonify({
+            "error": "No completed experiments found."
+        }), 404
+
+    # Experiment IDs begin with YYYYMMDD_HHMMSS,
+    # so folder-name ordering gives us the latest run.
+    latest_experiment = max(
+        completed_experiments,
+        key=lambda experiment:
+            experiment["directory"].name
+    )
+
+    summary = latest_experiment["summary"]
+    config = latest_experiment["config"]
 
     return jsonify({
-        "active_clients": 4,
-        "algorithm": "FedAvg",
-        "distribution": "IID",
-        "validation_accuracy": float(latest["val_accuracy"]),
-        "macro_f1": float(latest["macro_f1"]),
-        "weighted_f1": float(latest["weighted_f1"]),
-        "train_accuracy": float(latest["train_accuracy"]),
-        "rounds": int(latest["round"])
+        "experiment_id":
+            summary["experiment_id"],
+
+        "active_clients":
+            config.get("num_clients", 4),
+
+        "algorithm":
+            config["algorithm"],
+
+        "distribution":
+            config["distribution"],
+
+        "validation_accuracy":
+            summary["best_val_accuracy"],
+
+        "macro_f1":
+            summary["final_macro_f1"],
+
+        "weighted_f1":
+            summary["final_weighted_f1"],
+
+        "train_accuracy":
+            summary["final_train_accuracy"],
+
+        "rounds":
+            config["rounds"],
+
+        "local_epochs":
+            config["local_epochs"],
+
+        "batch_size":
+            config["batch_size"],
+
+        "learning_rate":
+            config["learning_rate"],
+
+        "mu":
+            config["mu"],
+
+        "class_weighting":
+            config["use_class_weights"],
+
+        "status":
+            summary["status"]
     })
 
 @app.route("/api/training-history", methods=["GET"])

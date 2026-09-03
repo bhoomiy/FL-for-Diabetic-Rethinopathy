@@ -41,9 +41,16 @@ export async function fetchDashboard() {
 }
 
 // GET /training-history
-export async function fetchTrainingHistory(distribution = "iid") {
+export async function fetchTrainingHistory(
+  distribution = "iid",
+  experimentId = null
+) {
+  const query = experimentId
+    ? `experiment_id=${encodeURIComponent(experimentId)}`
+    : `distribution=${encodeURIComponent(distribution)}`;
+
   return apiRequest(
-    `/training-history?distribution=${distribution}`
+    `/training-history?${query}`
   );
 }
 
@@ -74,9 +81,16 @@ export async function fetchModelPerformance(distribution = "iid") {
 }
 
 // GET /class-metrics
-export async function fetchClassMetrics(distribution = "iid") {
+export async function fetchClassMetrics(
+  distribution = "iid",
+  experimentId = null
+) {
+  const query = experimentId
+    ? `experiment_id=${encodeURIComponent(experimentId)}`
+    : `distribution=${encodeURIComponent(distribution)}`;
+
   return apiRequest(
-    `/class-metrics?distribution=${distribution}`
+    `/class-metrics?${query}`
   );
 }
 

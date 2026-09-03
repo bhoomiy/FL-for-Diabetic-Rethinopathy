@@ -5,23 +5,29 @@ import ChartCard from "@/components/common/ChartCard";
 import StatusBadge from "@/components/common/StatusBadge";
 import AccuracyLineChart from "@/components/charts/AccuracyLineChart";
 import ConfigurationSummary from "@/components/federated/ConfigurationSummary";
-import { CLIENTS } from "@/data/clients";
-import { CURRENT_BEST_CONFIG, RECENT_ACTIVITY, ROUND_CURVES } from "@/data/experiments";
-import { GLOBAL_METRICS, getWeakestClass } from "@/data/metrics";
-import { percent } from "@/components/charts/chartTheme";
 import { useEffect, useState } from "react";
+import { fetchExperiments } from "@/services/experimentService";
 import {
   fetchDashboard,
   fetchTrainingHistory,
   fetchClients,
+  fetchClassMetrics,
 } from "@/services/federatedService";
 
 export default function DashboardPage() {
-  const weakest = getWeakestClass();
+  const [dashboardData, setDashboardData] = useState(null);
+  const [trainingHistory, setTrainingHistory] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [recentExperiments, setRecentExperiments] = useState([]);
+  const [classMetrics, setClassMetrics] = useState([]);
 
-    const [dashboardData, setDashboardData] = useState(null);
-    const [trainingHistory, setTrainingHistory] = useState([]);
-    const [clients, setClients] = useState([]);
+    const weakest = classMetrics.length
+    ? classMetrics.reduce((lowest, current) =>
+        current.recall < lowest.recall
+          ? current
+          : lowest
+      )
+    : null;
 
   useEffect(() => {
     fetchDashboard()
@@ -34,14 +40,53 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-  fetchTrainingHistory()
+  if (!dashboardData?.experiment_id) return;
+
+  fetchTrainingHistory(
+    dashboardData.distribution,
+    dashboardData.experiment_id
+  )
     .then((data) => {
-      setTrainingHistory(data);
+      setTrainingHistory(data.history ?? []);
     })
     .catch((error) => {
-      console.error("Failed to fetch training history:", error);
+      console.error(
+        "Failed to fetch training history:",
+        error
+      );
+    });
+}, [dashboardData]);
+
+useEffect(() => {
+  fetchExperiments()
+    .then((data) => {
+      setRecentExperiments(data.slice(-5).reverse());
+    })
+    .catch((error) => {
+      console.error(
+        "Failed to fetch recent experiments:",
+        error
+      );
     });
 }, []);
+
+  useEffect(() => {
+  if (!dashboardData?.experiment_id) return;
+
+  fetchClassMetrics(
+    dashboardData.distribution,
+    dashboardData.experiment_id
+  )
+    .then((data) => {
+      setClassMetrics(data.class_metrics ?? data);
+    })
+    .catch((error) => {
+      console.error(
+        "Failed to fetch class metrics:",
+        error
+      );
+    });
+}, [dashboardData]);
 
 useEffect(() => {
   fetchClients()
@@ -75,7 +120,9 @@ useEffect(() => {
       label: "Global algorithm",
       value: dashboardData?.algorithm ?? "Loading...",
       icon: GitBranch,
-      hint: "μ = 0",
+      hint: dashboardData
+  ? `μ = ${dashboardData.mu}`
+  : "Loading...",
     },
 
     {
@@ -107,18 +154,36 @@ useEffect(() => {
 
     {
       label: "Aggregation",
-      value: GLOBAL_METRICS.aggregation,
+      value: "Weighted FedAvg",
       icon: Layers,
-      hint: "Sample-size weighted",
+      hint: "Sample-size weighted aggregation",
     },
 
     {
       label: "Global status",
-      value: GLOBAL_METRICS.status,
+      value: dashboardData ? "Completed" : "Loading...",
       icon: ShieldCheck,
-      hint: `Model ${GLOBAL_METRICS.modelVersion}`,
+      hint: dashboardData
+        ? `Latest experiment: ${dashboardData.experiment_id}`
+        : "Loading latest experiment",
     },
   ];
+
+  const currentConfig = dashboardData
+  ? {
+      experimentId: dashboardData.experiment_id,
+      distribution: dashboardData.distribution,
+      aggregation: "Weighted",
+      algorithm: dashboardData.algorithm,
+      learningRate: dashboardData.learning_rate,
+      mu: dashboardData.mu,
+      classWeighting: dashboardData.class_weighting,
+      rounds: dashboardData.rounds,
+      localEpochs: dashboardData.local_epochs,
+      batchSize: dashboardData.batch_size,
+      validationAccuracy: dashboardData.validation_accuracy,
+    }
+  : null;
 
   return (
     <div className="space-y-6">
@@ -126,7 +191,17 @@ useEffect(() => {
         eyebrow="Research overview"
         title="Global federated dashboard"
         description="Monitor the federated diabetic retinopathy experiment across four participating hospitals."
-        actions={<StatusBadge tone="success" dot>Global model {GLOBAL_METRICS.modelVersion} · Converged</StatusBadge>}
+        actions={
+          dashboardData ? (
+            <StatusBadge tone="success" dot>
+              {dashboardData.experiment_id} · Completed
+            </StatusBadge>
+          ) : (
+            <StatusBadge tone="info">
+              Loading model...
+            </StatusBadge>
+          )
+        }
       />
 
       <section className="card-surface relative overflow-hidden p-6 sm:p-8">
@@ -151,10 +226,14 @@ useEffect(() => {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <ChartCard
-          title="Training accuracy vs communication round"
-          subtitle="IID + FedAvg"
-          footer="Round-by-round values loaded from the federated training results."
-        >
+  title="Training accuracy vs communication round"
+  subtitle={
+    dashboardData
+      ? `${dashboardData.distribution.toUpperCase()} + ${dashboardData.algorithm}`
+      : "Loading experiment..."
+  }
+  footer="Round-by-round values from the latest federated experiment."
+>
           <AccuracyLineChart
             data={trainingHistory}
             series={[{ dataKey: "trainAcc", name: "Training accuracy", color: "var(--color-chart-1)" }]}
@@ -162,10 +241,18 @@ useEffect(() => {
         </ChartCard>
 
         <ChartCard
-          title="Validation accuracy vs communication round"
-          subtitle="IID FedAvg validation accuracy across 5 communication rounds"
-          footer="Final validation accuracy: 78.14%."
-        >
+  title="Validation accuracy vs communication round"
+  subtitle={
+    dashboardData
+      ? `${dashboardData.distribution.toUpperCase()} ${dashboardData.algorithm} validation accuracy across ${dashboardData.rounds} communication round${dashboardData.rounds === 1 ? "" : "s"}`
+      : "Loading experiment..."
+  }
+  footer={
+    dashboardData
+      ? `Best validation accuracy: ${dashboardData.validation_accuracy.toFixed(2)}%.`
+      : "Loading validation results..."
+  }
+>
           <AccuracyLineChart
             data={trainingHistory}
             series={[{ dataKey: "valAcc", name: "Validation accuracy", color: "var(--color-chart-2)" }]}
@@ -173,19 +260,6 @@ useEffect(() => {
         </ChartCard>
       </div>
 
-      <ChartCard
-        title="FedAvg vs FedProx"
-        subtitle="Validation accuracy under the Non-IID split"
-        footer="FedAvg curve shown as demonstration data — the run has not been recorded yet."
-      >
-        <AccuracyLineChart
-          data={ROUND_CURVES}
-          series={[
-            { dataKey: "valAcc", name: "FedProx (weighted)", color: "var(--color-chart-1)" },
-            { dataKey: "fedavg", name: "FedAvg (demo)", color: "var(--color-chart-3)" },
-          ]}
-        />
-      </ChartCard>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
@@ -212,44 +286,71 @@ useEffect(() => {
           </ChartCard>
 
           <ChartCard title="Recent experiment activity">
-            <ul className="space-y-3">
-              {RECENT_ACTIVITY.map((a) => (
-                <li key={a.id} className="flex items-start justify-between gap-3 border-b border-border pb-3 last:border-b-0 last:pb-0">
-                  <span className="flex items-start gap-2 text-sm text-foreground">
-                    <span
-                      className={`mt-1.5 size-1.5 shrink-0 rounded-full ${
-                        a.tone === "success" ? "bg-success" : a.tone === "warning" ? "bg-warning" : "bg-primary"
-                      }`}
-                      aria-hidden="true"
-                    />
-                    {a.text}
-                  </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{a.time}</span>
-                </li>
-              ))}
-            </ul>
-          </ChartCard>
+  {recentExperiments.length === 0 ? (
+    <p className="text-sm text-muted-foreground">
+      No completed experiments found.
+    </p>
+  ) : (
+    <ul className="space-y-3">
+      {recentExperiments.map((experiment) => (
+        <li
+          key={experiment.id}
+          className="flex items-start justify-between gap-3 border-b border-border pb-3 last:border-b-0 last:pb-0"
+        >
+          <span className="flex items-start gap-2 text-sm text-foreground">
+            <span
+              className="mt-1.5 size-1.5 shrink-0 rounded-full bg-success"
+              aria-hidden="true"
+            />
+
+            {experiment.id} completed —{" "}
+            {experiment.algorithm} ·{" "}
+            {experiment.distribution} ·{" "}
+            {experiment.accuracy != null
+              ? `${experiment.accuracy.toFixed(2)}% validation accuracy`
+              : "accuracy unavailable"}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )}
+</ChartCard>
         </div>
 
         <div className="space-y-6">
-          <ConfigurationSummary config={CURRENT_BEST_CONFIG} />
+          {currentConfig && (
+  <ConfigurationSummary config={currentConfig} />
+)}
 
           <section className="card-surface border-destructive/30 p-5">
-            <h2 className="flex items-center gap-2 text-base font-semibold text-destructive">
-              <AlertTriangle className="size-4" aria-hidden="true" />
-              Weak class warning
-            </h2>
-            <p className="mt-3 text-sm text-foreground">
-              <span className="font-semibold">{weakest.label}</span> currently has the lowest sensitivity at{" "}
-              {percent(weakest.recall)} recall.
-            </p>
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              The next optimization should target minority-class detection under Non-IID federated learning rather
-              than overall accuracy alone.
-            </p>
-          </section>
+  <h2 className="flex items-center gap-2 text-base font-semibold text-destructive">
+    <AlertTriangle className="size-4" aria-hidden="true" />
+    Weak class warning
+  </h2>
+
+  {weakest ? (
+    <>
+      <p className="mt-3 text-sm text-foreground">
+        <span className="font-semibold">
+          {weakest.class_name}
+        </span>{" "}
+        currently has the lowest sensitivity at{" "}
+        {(weakest.recall * 100).toFixed(2)}% recall.
+      </p>
+
+      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+        The next optimization should target minority-class detection
+        rather than overall accuracy alone.
+      </p>
+    </>
+  ) : (
+    <p className="mt-3 text-sm text-muted-foreground">
+      Loading class metrics...
+    </p>
+  )}
+</section>
         </div>
       </div>
     </div>
-  );
+);
 }
