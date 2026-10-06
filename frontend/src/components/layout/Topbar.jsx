@@ -1,14 +1,26 @@
-import { useState } from "react";
-import { Bell, LogOut, Menu, Search } from "lucide-react";
+import { useEffect, useState } from "react";
+import { LogOut, Menu, Search } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/context/AuthContext";
-import { GLOBAL_METRICS } from "@/data/metrics";
+import { fetchDashboard } from "@/services/federatedService";
 import StatusBadge from "@/components/common/StatusBadge";
 
 export default function Topbar({ onMenuClick, title }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+
+  const [globalModel, setGlobalModel] = useState(null);
+
+    useEffect(() => {
+      fetchDashboard()
+        .then((data) => {
+          setGlobalModel(data);
+        })
+        .catch((error) => {
+          console.error("Failed to load global model status:", error);
+        });
+    }, []);
 
   const handleLogout = () => {
     signOut();
@@ -42,17 +54,14 @@ export default function Topbar({ onMenuClick, title }) {
         </label>
 
         <StatusBadge tone="success" dot className="hidden sm:inline-flex">
-          Global model {GLOBAL_METRICS.modelVersion} · {GLOBAL_METRICS.status}
-        </StatusBadge>
+        {globalModel
+          ? `${globalModel.algorithm} · ${Number(
+              globalModel.validation_accuracy
+            ).toFixed(2)}%`
+          : "Loading global model"}
+      </StatusBadge>
 
-        <button
-          type="button"
-          aria-label="Notifications"
-          className="relative rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <Bell className="size-4" aria-hidden="true" />
-          <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-primary" aria-hidden="true" />
-        </button>
+    
 
         <div className="hidden text-right sm:block">
           <p className="text-xs font-semibold text-foreground">{user?.name}</p>
