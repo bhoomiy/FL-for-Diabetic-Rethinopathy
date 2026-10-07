@@ -1,0 +1,17 @@
+{
+    "experiment_id": "20261007_234520_fedavg_iid_dp",
+    "distribution": "iid",
+    "algorithm": "fedavg",
+    "num_clients": 4,
+    "rounds": 5,
+    "local_epochs": 1,
+    "batch_size": 32,
+    "learning_rate": 0.0005,
+    "mu": 0.0,
+    "use_class_weights": true,
+    "use_dp": true,
+    "dp_clip_norm": 1,
+    "dp_noise_multiplier": 0.001,
+    "max_batches": 5,
+    "test_run": false
+}

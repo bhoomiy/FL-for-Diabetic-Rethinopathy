@@ -147,98 +147,105 @@ class FLClient:
         to the federated server.
 
         Steps:
-        1. Compute local - global model update.
+        1. Compute the L2 norm of the complete client update.
         2. Clip the complete update to dp_clip_norm.
-        3. Add Gaussian noise to floating-point parameters.
-        4. Reconstruct the protected local model.
+        3. Add Gaussian noise.
+        4. Return the protected model state.
+
+        This implementation processes tensors one at a time
+        to reduce peak memory usage.
         """
 
         # ------------------------------------------------------
-        # Compute total L2 norm of the model update
+        # PASS 1: Compute total L2 norm without storing updates
         # ------------------------------------------------------
 
-        total_norm_squared = torch.tensor(
-            0.0,
-            device=self.device
-        )
+        total_norm_squared = 0.0
 
-        for key in local_state:
+        with torch.no_grad():
 
-            if not torch.is_floating_point(local_state[key]):
-                continue
+            for key, local_tensor in local_state.items():
 
-            update = (
-                local_state[key]
-                - global_state[key].to(self.device)
-            )
+                if not torch.is_floating_point(local_tensor):
+                    continue
 
-            total_norm_squared += torch.sum(
-                update ** 2
-            )
+                global_tensor = global_state[key]
 
-        total_norm = torch.sqrt(
-            total_norm_squared
-        )
+                # Compute one layer's update only
+                update = local_tensor.detach().cpu() - global_tensor.detach().cpu()
+
+                total_norm_squared += (
+                    update.double().pow(2).sum().item()
+                )
+
+                del update
+
+        total_norm = total_norm_squared ** 0.5
 
         # ------------------------------------------------------
-        # Clip complete model update
+        # Compute clipping coefficient
         # ------------------------------------------------------
 
         clip_coefficient = min(
             1.0,
-            self.dp_clip_norm
-            / (total_norm.item() + 1e-12)
+            self.dp_clip_norm / (total_norm + 1e-12)
         )
-
-        protected_state = {}
 
         noise_std = (
             self.dp_noise_multiplier
             * self.dp_clip_norm
         )
 
+        protected_state = {}
+
         # ------------------------------------------------------
-        # Apply clipping + Gaussian noise
+        # PASS 2: Clip + noise one tensor at a time
         # ------------------------------------------------------
 
-        for key in local_state:
+        with torch.no_grad():
 
-            global_tensor = global_state[key].to(
-                self.device
-            )
+            for key, local_tensor in local_state.items():
 
-            local_tensor = local_state[key]
+                # Non-floating buffers are copied unchanged
+                if not torch.is_floating_point(local_tensor):
 
-            if torch.is_floating_point(local_tensor):
+                    protected_state[key] = (
+                        local_tensor.detach().cpu().clone()
+                    )
 
-                update = (
-                    local_tensor
-                    - global_tensor
-                )
+                    continue
 
-                clipped_update = (
-                    update * clip_coefficient
-                )
+                local_cpu = local_tensor.detach().cpu()
+                global_cpu = global_state[key].detach().cpu()
 
-                noise = torch.randn_like(
-                    clipped_update
-                ) * noise_std
+                # Reuse one tensor for the update
+                protected_tensor = local_cpu.clone()
 
-                protected_state[key] = (
-                    global_tensor
-                    + clipped_update
-                    + noise
-                ).detach().cpu()
+                # local - global
+                protected_tensor.sub_(global_cpu)
 
-            else:
+                # clip
+                protected_tensor.mul_(clip_coefficient)
 
-                protected_state[key] = (
-                    local_tensor.detach().cpu()
-                )
+                # Gaussian noise — generated directly into one
+                # temporary tensor instead of retaining multiple
+                # full-sized intermediates
+                if noise_std > 0:
+
+                    noise = torch.randn_like(protected_tensor)
+                    noise.mul_(noise_std)
+                    protected_tensor.add_(noise)
+
+                    del noise
+
+                # global + protected update
+                protected_tensor.add_(global_cpu)
+
+                protected_state[key] = protected_tensor
 
         print(
             f"Client {self.client_id} | DP applied | "
-            f"Update norm: {total_norm.item():.6f} | "
+            f"Update norm: {total_norm:.6f} | "
             f"Clip coefficient: {clip_coefficient:.6f} | "
             f"Clip norm: {self.dp_clip_norm} | "
             f"Noise multiplier: {self.dp_noise_multiplier} | "

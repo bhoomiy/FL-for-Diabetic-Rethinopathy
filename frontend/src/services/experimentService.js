@@ -34,7 +34,7 @@ export async function startExperiment(config) {
     use_class_weights: config.classWeighting,
 
     // Full-dataset training
-    max_batches: null,
+    max_batches: 2,
     test_run: false,
 
     // Differential Privacy
