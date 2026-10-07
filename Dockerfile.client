@@ -1,0 +1,34 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System libraries required by OpenCV / image processing
+RUN apt-get update && apt-get install -y \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies required by the FL client
+RUN pip install --no-cache-dir \
+    torch \
+    torchvision \
+    pandas \
+    numpy \
+    pillow \
+    scikit-learn \
+    flask
+
+# Copy only the Python code needed by a hospital
+COPY fl /app/fl
+COPY models /app/models
+
+# Dataset Python module required by FLClient
+COPY datasets/preprocess.py /app/datasets/preprocess.py
+
+
+
+# Python should treat /app as the project root
+ENV PYTHONPATH=/app
+
+# Start the hospital worker when the container starts
+CMD ["python", "-m", "fl.hospital_worker"]

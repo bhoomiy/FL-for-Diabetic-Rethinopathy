@@ -1,0 +1,53 @@
+services:
+
+  hospital-1:
+    image: fedretina-hospital
+    container_name: fedretina-hospital-1
+    environment:
+      CLIENT_ID: "1"
+      DR_IMAGE_DIR: /app/datasets/train_images/train_images
+    ports:
+      - "5001:5000"
+    volumes:
+      - ./datasets/clients/client_1.csv:/app/datasets/clients/client_1.csv:ro
+      - ./datasets/clients_non_iid/client_1.csv:/app/datasets/clients_non_iid/client_1.csv:ro
+      - ./datasets/train_images/train_images:/app/datasets/train_images/train_images:ro
+
+  hospital-2:
+    image: fedretina-hospital
+    container_name: fedretina-hospital-2
+    environment:
+      CLIENT_ID: "2"
+      DR_IMAGE_DIR: /app/datasets/train_images/train_images
+    ports:
+      - "5002:5000"
+    volumes:
+      - ./datasets/clients/client_2.csv:/app/datasets/clients/client_2.csv:ro
+      - ./datasets/clients_non_iid/client_2.csv:/app/datasets/clients_non_iid/client_2.csv:ro
+      - ./datasets/train_images/train_images:/app/datasets/train_images/train_images:ro
+
+  hospital-3:
+    image: fedretina-hospital
+    container_name: fedretina-hospital-3
+    environment:
+      CLIENT_ID: "3"
+      DR_IMAGE_DIR: /app/datasets/train_images/train_images
+    ports:
+      - "5003:5000"
+    volumes:
+      - ./datasets/clients/client_3.csv:/app/datasets/clients/client_3.csv:ro
+      - ./datasets/clients_non_iid/client_3.csv:/app/datasets/clients_non_iid/client_3.csv:ro
+      - ./datasets/train_images/train_images:/app/datasets/train_images/train_images:ro
+
+  hospital-4:
+    image: fedretina-hospital
+    container_name: fedretina-hospital-4
+    environment:
+      CLIENT_ID: "4"
+      DR_IMAGE_DIR: /app/datasets/train_images/train_images
+    ports:
+      - "5004:5000"
+    volumes:
+      - ./datasets/clients/client_4.csv:/app/datasets/clients/client_4.csv:ro
+      - ./datasets/clients_non_iid/client_4.csv:/app/datasets/clients_non_iid/client_4.csv:ro
+      - ./datasets/train_images/train_images:/app/datasets/train_images/train_images:ro

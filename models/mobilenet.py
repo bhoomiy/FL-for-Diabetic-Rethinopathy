@@ -5,12 +5,25 @@ from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
 
 class DRMobileNetV2(nn.Module):
 
-    def __init__(self, num_classes=5, freeze_features=True):
+    def __init__(
+        self,
+        num_classes=5,
+        freeze_features=True,
+        pretrained=True
+    ):
         super().__init__()
 
-        # Load pretrained MobileNetV2
-        weights = MobileNet_V2_Weights.DEFAULT
-        self.model = mobilenet_v2(weights=weights)
+        # Central/global model can use pretrained ImageNet weights.
+        # Docker hospital clients can skip the download because they
+        # immediately receive the complete global state_dict.
+        if pretrained:
+            weights = MobileNet_V2_Weights.DEFAULT
+        else:
+            weights = None
+
+        self.model = mobilenet_v2(
+            weights=weights
+        )
 
         # Freeze feature extractor (optional)
         if freeze_features:
@@ -39,8 +52,13 @@ if __name__ == "__main__":
 
     print(model)
 
-    dummy = torch.randn(4, 3, 224, 224).to(device)
+    dummy = torch.randn(
+        4, 3, 224, 224
+    ).to(device)
 
     output = model(dummy)
 
-    print("Output Shape :", output.shape)
+    print(
+        "Output Shape :",
+        output.shape
+    )

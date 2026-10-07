@@ -401,16 +401,7 @@ def run_experiment(
     # Show Client Sizes
     # ==========================================
 
-    print(
-        "\nClient dataset sizes:"
-    )
-
-    for client in server.clients:
-
-        print(
-            f"Client {client.client_id}: "
-            f"{len(client.dataset)} images"
-        )
+    print("\nDocker hospital dataset sizes will be reported during each federated round.")
 
     # ==========================================
     # Store Results

@@ -52,8 +52,16 @@ class FLClient:
         )
 
         self.image_dir = Path(
-    r"C:\Users\RADHAGOPINATH\Downloads\FL-for-Diabetic-Rethinopathy\datasets\train_images\train_images"
-)
+            os.getenv(
+                "DR_IMAGE_DIR",
+                str(
+                    self.base_dir
+                    / "datasets"
+                    / "train_images"
+                    / "train_images"
+                )
+            )
+        )
 
         # ======================================================
         # DEVICE
@@ -70,6 +78,11 @@ class FLClient:
         if not self.client_csv.exists():
             raise FileNotFoundError(
                 f"Client CSV not found:\n{self.client_csv}"
+            )
+
+        if not self.image_dir.exists():
+            raise FileNotFoundError(
+                f"Training image directory not found:\n{self.image_dir}"
             )
 
         # ======================================================
@@ -126,7 +139,8 @@ class FLClient:
 
         model = DRMobileNetV2(
             num_classes=5,
-            freeze_features=False
+            freeze_features=False,
+            pretrained=False
         ).to(self.device)
 
         # ------------------------------------------------------
