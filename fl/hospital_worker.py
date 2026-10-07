@@ -28,6 +28,9 @@ hospital_status = {
     "learning_rate": None,
     "global_model_received": False,
     "completed_training_requests": 0,
+    "use_dp": False,
+    "dp_clip_norm": None,
+    "dp_noise_multiplier": None,
 }
 
 
@@ -161,12 +164,56 @@ def train():
             "None"
         )
 
+        dp_clip_norm = float(
+            request.form.get(
+                "dp_clip_norm",
+                1.0
+            )
+        )
+
+        dp_noise_multiplier = float(
+            request.form.get(
+                "dp_noise_multiplier",
+                0.1
+            )
+        )
+
     except ValueError:
         return jsonify(
             {
                 "status": "error",
                 "message": (
                     "Invalid numeric experiment configuration."
+                ),
+            }
+        ), 400
+
+    # --------------------------------------------------------
+    # Differential Privacy configuration
+    # --------------------------------------------------------
+
+    use_dp = (
+        request.form.get(
+            "use_dp",
+            "false"
+        ).lower()
+        == "true"
+    )
+
+    if dp_clip_norm <= 0:
+        return jsonify(
+            {
+                "status": "error",
+                "message": "dp_clip_norm must be greater than 0.",
+            }
+        ), 400
+
+    if dp_noise_multiplier < 0:
+        return jsonify(
+            {
+                "status": "error",
+                "message": (
+                    "dp_noise_multiplier cannot be negative."
                 ),
             }
         ), 400
@@ -347,6 +394,18 @@ def train():
         f"Class weighting: {use_class_weights}"
     )
 
+    print(
+        f"Differential Privacy: {use_dp}"
+    )
+
+    if use_dp:
+        print(
+            f"DP clip norm    : {dp_clip_norm}"
+        )
+        print(
+            f"DP noise mult.  : {dp_noise_multiplier}"
+        )
+
     # --------------------------------------------------------
     # Create hospital client for THIS experiment
     # --------------------------------------------------------
@@ -362,6 +421,9 @@ def train():
             mu=experiment_mu,
             client_folder=client_folder,
             learning_rate=learning_rate,
+            use_dp=use_dp,
+            dp_clip_norm=dp_clip_norm,
+            dp_noise_multiplier=dp_noise_multiplier,
         )
 
     except Exception as error:
@@ -488,6 +550,11 @@ def train():
         "global_model_received": True,
         "completed_training_requests":
             hospital_status["completed_training_requests"] + 1,
+        "use_dp": use_dp,
+        "dp_clip_norm": dp_clip_norm if use_dp else None,
+        "dp_noise_multiplier": (
+            dp_noise_multiplier if use_dp else None
+        ),
     }
 )
 
@@ -544,6 +611,18 @@ def train():
     response.headers[
         "X-Mu"
     ] = str(experiment_mu)
+
+    response.headers[
+        "X-Use-DP"
+    ] = str(use_dp).lower()
+
+    response.headers[
+        "X-DP-Clip-Norm"
+    ] = str(dp_clip_norm)
+
+    response.headers[
+        "X-DP-Noise-Multiplier"
+    ] = str(dp_noise_multiplier)
 
     # --------------------------------------------------------
     # Explicit memory cleanup

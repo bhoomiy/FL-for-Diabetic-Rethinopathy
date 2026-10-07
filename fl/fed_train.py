@@ -275,12 +275,25 @@ def run_experiment(
     mu=0.01,
     use_class_weights=True,
     max_batches=2,
-    test_run=True
-):
+    test_run=True,
+    use_dp=False,
+    dp_clip_norm=1.0,
+    dp_noise_multiplier=0.1
+    ):
 
     num_clients = 4
     distribution = distribution.lower()
     algorithm = algorithm.lower()
+
+    if dp_clip_norm <= 0:
+        raise ValueError(
+            "dp_clip_norm must be greater than 0"
+        )
+
+    if dp_noise_multiplier < 0:
+        raise ValueError(
+            "dp_noise_multiplier cannot be negative"
+        )
 
     if distribution == "iid":
         client_folder = "clients"
@@ -298,7 +311,14 @@ def run_experiment(
     else:
         raise ValueError("algorithm must be 'fedavg' or 'fedprox'")
 
-    experiment_name = f"{algorithm}_{distribution}"
+    privacy_mode = ("dp"
+        if use_dp
+        else "normal"
+    )
+
+    experiment_name = (
+        f"{algorithm}_{distribution}_{privacy_mode}"
+    )
     base_dir = Path(__file__).resolve().parent.parent
 
     if test_run:
@@ -333,6 +353,15 @@ def run_experiment(
     "learning_rate": learning_rate,
     "mu": experiment_mu,
     "use_class_weights": use_class_weights,
+    "use_dp": use_dp,
+    "dp_clip_norm": (
+        dp_clip_norm if use_dp else None
+    ),
+    "dp_noise_multiplier": (
+        dp_noise_multiplier
+        if use_dp
+        else None
+    ),
     "max_batches": max_batches,
     "test_run": test_run
     }
@@ -360,6 +389,14 @@ def run_experiment(
     print(f"Max batches       : {max_batches}")
     print(f"Mu                : {experiment_mu}")
     print(f"Class weighting   : {use_class_weights}")
+    print(f"Differential Priv.: {use_dp}")
+
+    if use_dp:
+        print(f"DP clip norm      : {dp_clip_norm}")
+        print(
+            f"DP noise mult.    : "
+            f"{dp_noise_multiplier}"
+        )
 
     # ==========================================
     # Validation Data
@@ -387,14 +424,17 @@ def run_experiment(
     # ==========================================
 
     server = FLServer(
-    num_clients=num_clients,
-    local_epochs=local_epochs,
-    batch_size=batch_size,
-    learning_rate=learning_rate,
-    max_batches=max_batches,
-    class_weights=class_weights,
-    mu=experiment_mu,
-    client_folder=client_folder
+        num_clients=num_clients,
+        local_epochs=local_epochs,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
+        max_batches=max_batches,
+        class_weights=class_weights,
+        mu=experiment_mu,
+        client_folder=client_folder,
+        use_dp=use_dp,
+        dp_clip_norm=dp_clip_norm,
+        dp_noise_multiplier=dp_noise_multiplier
     )
 
     # ==========================================
@@ -594,6 +634,15 @@ def run_experiment(
         "learning_rate": learning_rate,
         "mu": experiment_mu,
         "use_class_weights": use_class_weights,
+        "use_dp": use_dp,
+        "dp_clip_norm": (
+            dp_clip_norm if use_dp else None
+        ),
+        "dp_noise_multiplier": (
+            dp_noise_multiplier
+            if use_dp
+            else None
+        ),
         "final_train_accuracy": latest_result["train_accuracy"],
         "final_val_accuracy": latest_result["val_accuracy"],
         "final_macro_f1": latest_result["macro_f1"],
@@ -638,7 +687,9 @@ def run_experiment(
     )
 
     plt.title(
-        "FedProx IID - Accuracy vs Communication Round"
+        f"{algorithm.upper()} {distribution.upper()} "
+        f"({'DP' if use_dp else 'Normal'}) - "
+        f"Accuracy vs Communication Round"
     )
 
     plt.grid(True)
@@ -674,7 +725,9 @@ def run_experiment(
     )
 
     plt.title(
-        "FedProx IID - Loss vs Communication Round"
+        f"{algorithm.upper()} {distribution.upper()} "
+        f"({'DP' if use_dp else 'Normal'}) - "
+        f"Loss vs Communication Round"
     )
 
     plt.grid(True)
@@ -710,7 +763,9 @@ def run_experiment(
     )
 
     plt.title(
-        "FedProx IID - Macro F1 vs Communication Round"
+        f"{algorithm.upper()} {distribution.upper()} "
+        f"({'DP' if use_dp else 'Normal'}) - "
+        f"Macro F1 vs Communication Round"
     )
 
     plt.grid(True)

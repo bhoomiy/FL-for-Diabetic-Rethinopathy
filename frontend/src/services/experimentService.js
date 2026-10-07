@@ -32,9 +32,18 @@ export async function startExperiment(config) {
     learning_rate: config.learningRate,
     mu: config.algorithm === "FedProx" ? config.mu : 0,
     use_class_weights: config.classWeighting,
-    max_batches: 1,
+
+    // Full-dataset training
+    max_batches: null,
     test_run: false,
+
+    // Differential Privacy
+    use_dp: config.useDP,
+    dp_clip_norm: config.dpClipNorm,
+    dp_noise_multiplier: config.dpNoiseMultiplier,
   };
+
+  console.log("FEDRETINA EXPERIMENT PAYLOAD:", payload); 
 
   const response = await fetch(`${API_BASE}/experiments/start`, {
     method: "POST",

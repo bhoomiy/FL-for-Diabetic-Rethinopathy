@@ -18,6 +18,11 @@ const DEFAULTS = {
   rounds: 1,
   localEpochs: 1,
   batchSize: 32,
+
+  // Differential Privacy
+  useDP: false,
+  dpClipNorm: 1.0,
+  dpNoiseMultiplier: 0.001,
 };
 
 function Field({ label, hint, children }) {
@@ -138,7 +143,7 @@ export default function ConfigureExperimentPage() {
                   type="range"
                   min="1"
                   max="50"
-                  step="5"
+                  step="1"
                   value={config.rounds}
                   onChange={(e) => update({ rounds: Number(e.target.value) })}
                   className="w-full accent-[var(--color-primary)]"
@@ -179,6 +184,57 @@ export default function ConfigureExperimentPage() {
                 />
                 Apply class weighting to counter minority-class imbalance
               </label>
+              <label className="flex items-center gap-2 text-xs text-foreground sm:col-span-2">
+  <input
+    type="checkbox"
+    checked={config.useDP}
+    onChange={(e) => update({ useDP: e.target.checked })}
+    className="size-4 rounded border-border bg-surface accent-[var(--color-primary)]"
+  />
+  Enable Differential Privacy for client model updates
+</label>
+
+{config.useDP ? (
+  <>
+    <Field
+      label="DP clipping norm"
+      hint="Maximum L2 norm allowed for each client's model update."
+    >
+      <select
+        className={selectClass}
+        value={config.dpClipNorm}
+        onChange={(e) =>
+          update({ dpClipNorm: Number(e.target.value) })
+        }
+      >
+        {[0.5, 1.0, 2.0].map((value) => (
+          <option key={value} value={value}>
+            {value}
+          </option>
+        ))}
+      </select>
+    </Field>
+
+    <Field
+      label="DP noise multiplier"
+      hint="Controls the Gaussian noise added to the clipped client update."
+    >
+      <select
+        className={selectClass}
+        value={config.dpNoiseMultiplier}
+        onChange={(e) =>
+          update({ dpNoiseMultiplier: Number(e.target.value) })
+        }
+      >
+        {[0.0001, 0.0005, 0.001, 0.005].map((value) => (
+          <option key={value} value={value}>
+            {value}
+          </option>
+        ))}
+      </select>
+    </Field>
+  </>
+) : null}
             </div>
 
             <div className="mt-6 flex flex-wrap gap-2 border-t border-border pt-5">

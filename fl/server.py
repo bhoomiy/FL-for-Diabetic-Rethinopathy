@@ -18,8 +18,11 @@ class FLServer:
         max_batches=None,
         class_weights=None,
         mu=0.0,
-        client_folder="clients"
-    ):
+        client_folder="clients",
+        use_dp=False,
+        dp_clip_norm=1.0,
+        dp_noise_multiplier=0.1
+        ):
 
         # ======================================================
         # BASIC CONFIGURATION
@@ -38,6 +41,9 @@ class FLServer:
         self.class_weights = class_weights
         self.mu = mu
         self.client_folder = client_folder
+        self.use_dp = use_dp
+        self.dp_clip_norm = dp_clip_norm
+        self.dp_noise_multiplier = dp_noise_multiplier
 
         # ======================================================
         # DETERMINE DISTRIBUTION
@@ -132,6 +138,19 @@ class FLServer:
             f"{self.class_weights is not None}"
         )
 
+        print(
+            f"Differential Privacy: {self.use_dp}"
+        )
+
+        if self.use_dp:
+            print(
+                f"DP clip norm    : {self.dp_clip_norm}"
+            )
+            print(
+                f"DP noise mult.  : "
+                f"{self.dp_noise_multiplier}"
+            )
+
     # ==========================================================
     # FEDAVG WEIGHTED AGGREGATION
     # ==========================================================
@@ -221,6 +240,17 @@ class FLServer:
                 if use_class_weights
                 else "false"
             ),
+            "use_dp": (
+                "true"
+                if self.use_dp
+                else "false"
+            ),
+            "dp_clip_norm": str(
+                self.dp_clip_norm
+            ),
+            "dp_noise_multiplier": str(
+                self.dp_noise_multiplier
+            ),
         }
 
         if use_class_weights:
@@ -297,7 +327,7 @@ class FLServer:
                     )
                 },
                 data=request_config,
-                timeout=600,
+                timeout=1800,
             )
 
         except requests.RequestException as error:
@@ -331,6 +361,14 @@ class FLServer:
             )
         )
 
+        returned_use_dp = (
+            response.headers.get(
+                "X-Use-DP",
+                "false"
+            ).lower()
+            == "true"
+        )
+
         if (
             returned_distribution
             != self.distribution
@@ -353,6 +391,14 @@ class FLServer:
                 f"'{returned_algorithm}' "
                 f"instead of "
                 f"'{self.algorithm}'."
+            )
+
+        if returned_use_dp != self.use_dp:
+            raise RuntimeError(
+                f"Hospital {client_id} DP mismatch. "
+                f"Expected use_dp={self.use_dp}, "
+                f"but hospital returned "
+                f"use_dp={returned_use_dp}."
             )
 
         # ------------------------------------------------------

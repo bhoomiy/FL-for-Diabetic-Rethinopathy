@@ -858,17 +858,22 @@ def start_experiment():
     data = request.get_json()
 
     result = run_experiment(
-        distribution=data.get("distribution", "iid"),
-        algorithm=data.get("algorithm", "fedavg"),
-        rounds=data.get("rounds", 1),
-        local_epochs=data.get("local_epochs", 1),
-        batch_size=data.get("batch_size", 32),
-        learning_rate=data.get("learning_rate", 0.0005),
-        mu=data.get("mu", 0.01),
-        use_class_weights=data.get("use_class_weights", True),
-        max_batches=data.get("max_batches", None),
-        test_run=data.get("test_run", False)
-    )
+    distribution=data.get("distribution", "iid"),
+    algorithm=data.get("algorithm", "fedavg"),
+    rounds=data.get("rounds", 1),
+    local_epochs=data.get("local_epochs", 1),
+    batch_size=data.get("batch_size", 32),
+    learning_rate=data.get("learning_rate", 0.0005),
+    mu=data.get("mu", 0.01),
+    use_class_weights=data.get("use_class_weights", True),
+    max_batches=data.get("max_batches", None),
+    test_run=data.get("test_run", False),
+
+    # Differential Privacy
+    use_dp=data.get("use_dp", False),
+    dp_clip_norm=data.get("dp_clip_norm", 1.0),
+    dp_noise_multiplier=data.get("dp_noise_multiplier", 0.001)
+)
 
     return jsonify(result)
 

@@ -22,8 +22,11 @@ class FLClient:
     class_weights=None,
     mu=0.0,
     client_folder="clients",
-    learning_rate=0.0005
-):
+    learning_rate=0.0005,
+    use_dp=False,
+    dp_clip_norm=1.0,
+    dp_noise_multiplier=0.1
+    ):
 
         self.client_id = client_id
         self.batch_size = batch_size
@@ -32,6 +35,9 @@ class FLClient:
         self.class_weights = class_weights
         self.mu = mu
         self.learning_rate = learning_rate
+        self.use_dp = use_dp
+        self.dp_clip_norm = dp_clip_norm
+        self.dp_noise_multiplier = dp_noise_multiplier
 
         # ======================================================
         # PROJECT DIRECTORIES
@@ -126,6 +132,121 @@ class FLClient:
             shuffle=True,
             num_workers=0
         )
+
+    # ==========================================================
+    # DIFFERENTIAL PRIVACY
+    # ==========================================================
+
+    def apply_differential_privacy(
+        self,
+        local_state,
+        global_state
+    ):
+        """
+        Protect the client's model update before it is sent
+        to the federated server.
+
+        Steps:
+        1. Compute local - global model update.
+        2. Clip the complete update to dp_clip_norm.
+        3. Add Gaussian noise to floating-point parameters.
+        4. Reconstruct the protected local model.
+        """
+
+        # ------------------------------------------------------
+        # Compute total L2 norm of the model update
+        # ------------------------------------------------------
+
+        total_norm_squared = torch.tensor(
+            0.0,
+            device=self.device
+        )
+
+        for key in local_state:
+
+            if not torch.is_floating_point(local_state[key]):
+                continue
+
+            update = (
+                local_state[key]
+                - global_state[key].to(self.device)
+            )
+
+            total_norm_squared += torch.sum(
+                update ** 2
+            )
+
+        total_norm = torch.sqrt(
+            total_norm_squared
+        )
+
+        # ------------------------------------------------------
+        # Clip complete model update
+        # ------------------------------------------------------
+
+        clip_coefficient = min(
+            1.0,
+            self.dp_clip_norm
+            / (total_norm.item() + 1e-12)
+        )
+
+        protected_state = {}
+
+        noise_std = (
+            self.dp_noise_multiplier
+            * self.dp_clip_norm
+        )
+
+        # ------------------------------------------------------
+        # Apply clipping + Gaussian noise
+        # ------------------------------------------------------
+
+        for key in local_state:
+
+            global_tensor = global_state[key].to(
+                self.device
+            )
+
+            local_tensor = local_state[key]
+
+            if torch.is_floating_point(local_tensor):
+
+                update = (
+                    local_tensor
+                    - global_tensor
+                )
+
+                clipped_update = (
+                    update * clip_coefficient
+                )
+
+                noise = torch.randn_like(
+                    clipped_update
+                ) * noise_std
+
+                protected_state[key] = (
+                    global_tensor
+                    + clipped_update
+                    + noise
+                ).detach().cpu()
+
+            else:
+
+                protected_state[key] = (
+                    local_tensor.detach().cpu()
+                )
+
+        print(
+            f"Client {self.client_id} | DP applied | "
+            f"Update norm: {total_norm.item():.6f} | "
+            f"Clip coefficient: {clip_coefficient:.6f} | "
+            f"Clip norm: {self.dp_clip_norm} | "
+            f"Noise multiplier: {self.dp_noise_multiplier} | "
+            f"Noise std: {noise_std:.6f}",
+            flush=True
+        )
+
+        return protected_state
 
     # ==========================================================
     # LOCAL TRAINING
@@ -331,8 +452,17 @@ class FLClient:
             100 * total_correct / total_samples
         )
 
+        local_state = model.state_dict()
+
+        if self.use_dp:
+
+            local_state = self.apply_differential_privacy(
+                local_state=local_state,
+                global_state=global_model.state_dict()
+            )
+
         return (
-            model.state_dict(),
+            local_state,
             len(self.dataset),
             train_loss,
             train_accuracy
