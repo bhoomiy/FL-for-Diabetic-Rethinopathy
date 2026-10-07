@@ -5,6 +5,11 @@ from PIL import Image
 from torchvision import transforms
 
 from models.mobilenet import DRMobileNetV2
+from backend.gradcam import (
+    GradCAM,
+    create_gradcam_overlay,
+    image_to_base64
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -46,30 +51,17 @@ prediction_transform = transforms.Compose([
 
 def get_latest_model():
 
-    experiment_folders = [
-        folder
-        for folder in EXPERIMENTS_DIR.iterdir()
-        if folder.is_dir()
-        and (folder / "best_global_model.pth").exists()
-    ]
+    checkpoint_path = (
+        BASE_DIR
+        / "global_model_non_iid_fedprox_weighted_round_5.pth"
+    )
 
-    if not experiment_folders:
+    if not checkpoint_path.exists():
         raise FileNotFoundError(
-            "No trained global model was found."
+            f"Trained global model not found at: {checkpoint_path}"
         )
 
-    latest_experiment = max(
-        experiment_folders,
-        key=lambda folder: folder.name
-    )
-
-    checkpoint_path = (
-        latest_experiment
-        / "best_global_model.pth"
-    )
-
-    return latest_experiment.name, checkpoint_path
-
+    return "non_iid_fedprox_weighted_round_5", checkpoint_path
 
 def predict_retinal_image(image):
 
@@ -85,7 +77,7 @@ def predict_retinal_image(image):
 
     model = DRMobileNetV2(
         num_classes=5,
-        freeze_features=True
+        freeze_features=False
     ).to(device)
 
     state_dict = torch.load(
@@ -99,11 +91,18 @@ def predict_retinal_image(image):
 
     image = image.convert("RGB")
 
+    # Keep the original image for Grad-CAM overlay
+    original_image = image.copy()
+
     image_tensor = (
         prediction_transform(image)
         .unsqueeze(0)
         .to(device)
     )
+
+    # ---------------------------------------------------------
+    # Prediction
+    # ---------------------------------------------------------
 
     with torch.no_grad():
 
@@ -121,6 +120,42 @@ def predict_retinal_image(image):
     confidence = float(
         probabilities[predicted_index].item()
     )
+
+    # ---------------------------------------------------------
+    # Grad-CAM
+    # ---------------------------------------------------------
+
+    # MobileNetV2's final convolutional feature layer
+    target_layer = model.model.features[-1]
+
+    gradcam = GradCAM(
+        model=model,
+        target_layer=target_layer
+    )
+
+    try:
+
+        cam = gradcam.generate(
+            input_tensor=image_tensor,
+            target_class=predicted_index
+        )
+
+        overlay = create_gradcam_overlay(
+            original_image=original_image,
+            cam=cam
+        )
+
+        gradcam_image = image_to_base64(
+            overlay
+        )
+
+    finally:
+
+        gradcam.close()
+
+    # ---------------------------------------------------------
+    # Class probabilities
+    # ---------------------------------------------------------
 
     probability_results = []
 
@@ -145,5 +180,8 @@ def predict_retinal_image(image):
             experiment_id,
 
         "probabilities":
-            probability_results
+            probability_results,
+
+        "gradcam":
+            gradcam_image
     }
