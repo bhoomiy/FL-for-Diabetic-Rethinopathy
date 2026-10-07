@@ -11,6 +11,7 @@ import {
   fetchClients,
   fetchDashboard,
   fetchDataDistribution,
+  fetchHospitalStatus,
 } from "@/services/federatedService";
 import { getClientById } from "@/data/clients";
 import { DR_CLASSES } from "@/constants/drClasses";
@@ -31,22 +32,28 @@ export function HospitalDashboardPage() {
   const [client, setClient] = useState(null);
   const [dashboardData, setDashboardData] = useState(null);
   const [distribution, setDistribution] = useState(null);
+  const [runtimeStatus, setRuntimeStatus] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadHospitalData() {
       try {
-        const [clientsData, dashboard, distributionData] =
-          await Promise.all([
-            fetchClients(),
-            fetchDashboard(),
-            fetchDataDistribution(),
-          ]);
-
         const clientId = Number(
           String(user?.clientId).replace("client-", "")
         );
+        const [
+          clientsData,
+          dashboard,
+          distributionData,
+          hospitalStatus,
+        ] = await Promise.all([
+          fetchClients(),
+          fetchDashboard(),
+          fetchDataDistribution(),
+          fetchHospitalStatus(clientId),
+        ]);
 
+        
         const currentClient = clientsData.find(
           (item) => Number(item.id) === clientId
         );
@@ -91,6 +98,7 @@ export function HospitalDashboardPage() {
 
         setClient(currentClient);
         setDashboardData(dashboard);
+        setRuntimeStatus(hospitalStatus);
         setDistribution(classDistribution);
       } catch (error) {
         console.error("Failed to load hospital dashboard:", error);
@@ -124,10 +132,23 @@ export function HospitalDashboardPage() {
         title={client.name}
         description="Your local contribution to the federated diabetic retinopathy network."
         actions={
-          <StatusBadge tone="success" dot>
-            Participating
-          </StatusBadge>
-        }
+        <StatusBadge
+          tone={
+            runtimeStatus?.status === "completed"
+              ? "success"
+              : runtimeStatus?.status === "training"
+                ? "info"
+                : "neutral"
+          }
+          dot
+        >
+          {runtimeStatus?.status === "completed"
+            ? "Completed"
+            : runtimeStatus?.status === "training"
+              ? "Training"
+              : "Idle"}
+        </StatusBadge>
+      }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -309,19 +330,22 @@ export function HospitalTrainingPage() {
 
   const [dashboardData, setDashboardData] = useState(null);
   const [client, setClient] = useState(null);
+  const [runtimeStatus, setRuntimeStatus] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadTrainingData() {
       try {
-        const [dashboard, clientsData] = await Promise.all([
-          fetchDashboard(),
-          fetchClients(),
-        ]);
-
         const clientId = Number(
           String(user?.clientId).replace("client-", "")
         );
+
+        const [dashboard, clientsData, hospitalStatus] =
+          await Promise.all([
+            fetchDashboard(),
+            fetchClients(),
+            fetchHospitalStatus(clientId),
+          ]);
 
         const currentClient = clientsData.find(
           (item) => Number(item.id) === clientId
@@ -329,8 +353,12 @@ export function HospitalTrainingPage() {
 
         setDashboardData(dashboard);
         setClient(currentClient ?? null);
+        setRuntimeStatus(hospitalStatus);
       } catch (error) {
-        console.error("Failed to load hospital training data:", error);
+        console.error(
+          "Failed to load hospital training data:",
+          error
+        );
       } finally {
         setLoading(false);
       }
@@ -347,76 +375,151 @@ export function HospitalTrainingPage() {
     return (
       <EmptyState
         title="Loading training data"
-        description="Loading the latest federated experiment."
+        description="Loading this hospital's Docker runtime state."
       />
     );
   }
 
-  if (!client || !dashboardData) return <NoClient />;
+  if (!client || !dashboardData || !runtimeStatus) {
+    return <NoClient />;
+  }
 
-  const rounds = Number(dashboardData.rounds ?? 0);
+  const runtimeState = runtimeStatus.status ?? "idle";
 
-  const participation = Array.from(
-    { length: rounds },
-    (_, index) => ({
-      round: index + 1,
-      participated: true,
-    })
-  );
+  const statusTone =
+    runtimeState === "completed"
+      ? "success"
+      : runtimeState === "training"
+        ? "info"
+        : "neutral";
+
+  const statusLabel =
+    runtimeState === "completed"
+      ? "Completed"
+      : runtimeState === "training"
+        ? "Training"
+        : "Idle";
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="My hospital"
         title="Local training"
-        description="Participation of this hospital in the latest federated experiment."
+        description="Live training state reported by this hospital's Docker worker."
         actions={
-          <StatusBadge tone="success" dot>
-            Completed
+          <StatusBadge tone={statusTone} dot>
+            {statusLabel}
           </StatusBadge>
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="Local epochs per round"
-          value={String(dashboardData.local_epochs ?? "—")}
+          label="Completed training requests"
+          value={String(
+            runtimeStatus.completed_training_requests ?? 0
+          )}
+          hint="Since this hospital container started"
         />
 
         <MetricCard
-          label="Communication rounds"
-          value={String(dashboardData.rounds ?? "—")}
+          label="Local epochs"
+          value={
+            runtimeStatus.local_epochs != null
+              ? String(runtimeStatus.local_epochs)
+              : "—"
+          }
+          hint="Latest Docker training request"
         />
 
         <MetricCard
-          label="Latest experiment"
-          value={dashboardData.experiment_id ?? "—"}
-          hint={`${dashboardData.distribution?.toUpperCase() ?? "—"} · ${
-            dashboardData.algorithm ?? "—"
-          }`}
+          label="Local training accuracy"
+          value={
+            runtimeStatus.train_accuracy != null
+              ? `${Number(runtimeStatus.train_accuracy).toFixed(2)}%`
+              : "—"
+          }
+          hint="Latest local training result"
+        />
+
+        <MetricCard
+          label="Local training loss"
+          value={
+            runtimeStatus.train_loss != null
+              ? Number(runtimeStatus.train_loss).toFixed(4)
+              : "—"
+          }
+          hint="Latest local training result"
         />
       </div>
 
       <ChartCard
-        title="Participation history"
-        subtitle={`${client.name} participated in the latest completed experiment`}
+        title="Docker training state"
+        subtitle={`${client.name} runtime information`}
       >
-        <ul className="space-y-3">
-          {participation.map((item) => (
-            <li
-              key={item.round}
-              className="flex items-center justify-between border-b border-border pb-3 text-xs last:border-b-0 last:pb-0"
-            >
-              <span className="font-medium text-foreground">
-                Round {item.round}
-              </span>
+        <div className="space-y-4 text-sm">
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <span className="text-muted-foreground">
+              Global model received
+            </span>
 
-              <StatusBadge tone="success">
-                Participated
-              </StatusBadge>
-            </li>
-          ))}
-        </ul>
+            <StatusBadge
+              tone={
+                runtimeStatus.global_model_received
+                  ? "success"
+                  : "neutral"
+              }
+            >
+              {runtimeStatus.global_model_received ? "Yes" : "No"}
+            </StatusBadge>
+          </div>
+
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <span className="text-muted-foreground">
+              Distribution
+            </span>
+
+            <span className="font-medium text-foreground">
+              {runtimeStatus.distribution
+                ? runtimeStatus.distribution
+                    .replace("_", "-")
+                    .toUpperCase()
+                : "—"}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <span className="text-muted-foreground">
+              Algorithm
+            </span>
+
+            <span className="font-medium text-foreground">
+              {runtimeStatus.algorithm
+                ? runtimeStatus.algorithm.toUpperCase()
+                : "—"}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <span className="text-muted-foreground">
+              Local samples
+            </span>
+
+            <span className="font-medium text-foreground">
+              {runtimeStatus.num_samples ?? "—"}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">
+              Learning rate
+            </span>
+
+            <span className="font-medium text-foreground">
+              {runtimeStatus.learning_rate ?? "—"}
+            </span>
+          </div>
+        </div>
       </ChartCard>
     </div>
   );
@@ -427,19 +530,22 @@ export function HospitalGlobalModelPage() {
 
   const [dashboardData, setDashboardData] = useState(null);
   const [client, setClient] = useState(null);
+  const [runtimeStatus, setRuntimeStatus] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadGlobalModel() {
       try {
-        const [dashboard, clientsData] = await Promise.all([
-          fetchDashboard(),
-          fetchClients(),
-        ]);
-
         const clientId = Number(
           String(user?.clientId).replace("client-", "")
         );
+
+        const [dashboard, clientsData, hospitalStatus] =
+          await Promise.all([
+            fetchDashboard(),
+            fetchClients(),
+            fetchHospitalStatus(clientId),
+          ]);
 
         const currentClient = clientsData.find(
           (item) => Number(item.id) === clientId
@@ -447,8 +553,12 @@ export function HospitalGlobalModelPage() {
 
         setDashboardData(dashboard);
         setClient(currentClient ?? null);
+        setRuntimeStatus(hospitalStatus);
       } catch (error) {
-        console.error("Failed to load global model data:", error);
+        console.error(
+          "Failed to load global model data:",
+          error
+        );
       } finally {
         setLoading(false);
       }
@@ -465,12 +575,14 @@ export function HospitalGlobalModelPage() {
     return (
       <EmptyState
         title="Loading global model"
-        description="Loading the latest federated model."
+        description="Loading federated model information."
       />
     );
   }
 
-  if (!client || !dashboardData) return <NoClient />;
+  if (!client || !dashboardData || !runtimeStatus) {
+    return <NoClient />;
+  }
 
   const algorithm = dashboardData.algorithm ?? "—";
 
@@ -479,31 +591,41 @@ export function HospitalGlobalModelPage() {
       ? `μ = ${dashboardData.mu ?? "—"}`
       : "Weighted aggregation";
 
+  const receivedGlobalModel =
+    runtimeStatus.global_model_received === true;
+
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="My hospital"
         title="Global model"
-        description="The shared model produced by aggregating updates from all participating hospitals."
+        description="The shared model produced by aggregating updates from participating hospitals."
         actions={
-          <StatusBadge tone="success" dot>
-            Latest model
+          <StatusBadge
+            tone={receivedGlobalModel ? "success" : "neutral"}
+            dot
+          >
+            {receivedGlobalModel
+              ? "Model received"
+              : "Not received"}
           </StatusBadge>
         }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="Experiment"
+          label="Latest server experiment"
           value={dashboardData.experiment_id ?? "—"}
-          hint="Latest completed experiment"
+          hint="Latest completed federated experiment"
         />
 
         <MetricCard
           label="Validation accuracy"
           value={
             dashboardData.validation_accuracy != null
-              ? `${Number(dashboardData.validation_accuracy).toFixed(2)}%`
+              ? `${Number(
+                  dashboardData.validation_accuracy
+                ).toFixed(2)}%`
               : "—"
           }
           confirmed
@@ -521,14 +643,65 @@ export function HospitalGlobalModelPage() {
         />
       </div>
 
+      <ChartCard
+        title="Hospital model state"
+        subtitle={`${client.name} Docker worker`}
+      >
+        <div className="space-y-4 text-sm">
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <span className="text-muted-foreground">
+              Global model received by this worker
+            </span>
+
+            <StatusBadge
+              tone={receivedGlobalModel ? "success" : "neutral"}
+            >
+              {receivedGlobalModel ? "Yes" : "No"}
+            </StatusBadge>
+          </div>
+
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <span className="text-muted-foreground">
+              Worker status
+            </span>
+
+            <span className="font-medium text-foreground">
+              {runtimeStatus.status
+                ? runtimeStatus.status.toUpperCase()
+                : "—"}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <span className="text-muted-foreground">
+              Completed training requests
+            </span>
+
+            <span className="font-medium text-foreground">
+              {runtimeStatus.completed_training_requests ?? 0}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">
+              Latest local algorithm
+            </span>
+
+            <span className="font-medium text-foreground">
+              {runtimeStatus.algorithm
+                ? runtimeStatus.algorithm.toUpperCase()
+                : "—"}
+            </span>
+          </div>
+        </div>
+      </ChartCard>
+
       <ChartCard title="What your hospital contributes">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          {client.name} trains locally for{" "}
-          {dashboardData.local_epochs ?? "—"} epoch
-          {Number(dashboardData.local_epochs) === 1 ? "" : "s"} per round
-          and shares only model parameter updates with the federated server.
-          The server weights this hospital's update according to its local
-          sample count before aggregating it into the global model.
+          {client.name} trains locally and shares model parameter
+          updates with the federated server. The server weights this
+          hospital&apos;s update according to its local sample count
+          before aggregating it into the global model.
         </p>
       </ChartCard>
     </div>

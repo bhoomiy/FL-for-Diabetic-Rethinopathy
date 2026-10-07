@@ -10,6 +10,26 @@ from models.mobilenet import DRMobileNetV2
 
 app = Flask(__name__)
 
+# ============================================================
+# HOSPITAL RUNTIME STATUS
+# ============================================================
+
+hospital_status = {
+    "status": "idle",
+    "hospital_id": None,
+    "distribution": None,
+    "algorithm": None,
+    "mu": None,
+    "num_samples": None,
+    "train_loss": None,
+    "train_accuracy": None,
+    "local_epochs": None,
+    "batch_size": None,
+    "learning_rate": None,
+    "global_model_received": False,
+    "completed_training_requests": 0,
+}
+
 
 # ============================================================
 # HOSPITAL ID
@@ -30,6 +50,8 @@ except ValueError:
 
 if client_id not in [1, 2, 3, 4]:
     raise ValueError("CLIENT_ID must be between 1 and 4.")
+
+hospital_status["hospital_id"] = client_id
 
 
 print("=" * 60)
@@ -54,6 +76,13 @@ def health():
         }
     )
 
+# ============================================================
+# HOSPITAL STATUS
+# ============================================================
+
+@app.route("/status", methods=["GET"])
+def status():
+    return jsonify(hospital_status)
 
 # ============================================================
 # LOCAL TRAINING
@@ -68,6 +97,9 @@ def train():
         f"Training request received by Hospital {client_id}"
     )
     print("=" * 60)
+
+    hospital_status["status"] = "training"
+    hospital_status["global_model_received"] = False
 
     # --------------------------------------------------------
     # Validate global model
@@ -396,6 +428,8 @@ def train():
         f"global model successfully."
     )
 
+    hospital_status["global_model_received"] = True
+
     # --------------------------------------------------------
     # Perform local training
     # --------------------------------------------------------
@@ -438,6 +472,24 @@ def train():
     print(
         f"Accuracy: {train_accuracy:.2f}%"
     )
+
+    hospital_status.update(
+    {
+        "status": "completed",
+        "distribution": distribution,
+        "algorithm": algorithm,
+        "mu": experiment_mu,
+        "num_samples": num_samples,
+        "train_loss": float(train_loss),
+        "train_accuracy": float(train_accuracy),
+        "local_epochs": local_epochs,
+        "batch_size": batch_size,
+        "learning_rate": learning_rate,
+        "global_model_received": True,
+        "completed_training_requests":
+            hospital_status["completed_training_requests"] + 1,
+    }
+)
 
     # --------------------------------------------------------
     # Serialize updated weights

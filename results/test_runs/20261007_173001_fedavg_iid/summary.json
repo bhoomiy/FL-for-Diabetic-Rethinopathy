@@ -1,0 +1,20 @@
+{
+    "experiment_id": "20261007_173001_fedavg_iid",
+    "distribution": "iid",
+    "algorithm": "fedavg",
+    "num_clients": 4,
+    "rounds": 1,
+    "local_epochs": 1,
+    "batch_size": 32,
+    "learning_rate": 0.0005,
+    "mu": 0.0,
+    "use_class_weights": true,
+    "final_train_accuracy": 11.719283276450511,
+    "final_val_accuracy": 19.398907103825135,
+    "final_macro_f1": 0.13366366966366966,
+    "final_weighted_f1": 0.19937454166962362,
+    "best_val_accuracy": 19.398907103825135,
+    "best_round": 1,
+    "status": "completed",
+    "test_run": true
+}

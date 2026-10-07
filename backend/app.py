@@ -5,6 +5,7 @@ from pathlib import Path
 import json
 from PIL import Image
 from backend.prediction_service import predict_retinal_image
+import requests
 
 from fl.fed_train import run_experiment
 
@@ -141,7 +142,44 @@ def get_experiment_by_id(experiment_id):
 
         return None
 
+# ============================================================
+# DOCKER HOSPITAL RUNTIME STATUS
+# ============================================================
 
+@app.route("/api/hospitals/<int:hospital_id>/status", methods=["GET"])
+def hospital_runtime_status(hospital_id):
+
+    if hospital_id not in range(1, 5):
+        return jsonify({
+            "error": "Hospital ID must be between 1 and 4."
+        }), 400
+
+    hospital_url = (
+        f"http://localhost:{5000 + hospital_id}/status"
+    )
+
+    try:
+        response = requests.get(
+            hospital_url,
+            timeout=5
+        )
+
+        response.raise_for_status()
+
+        return jsonify(response.json())
+
+    except requests.RequestException as error:
+        print(
+            f"Failed to reach Hospital {hospital_id}:",
+            error
+        )
+
+        return jsonify({
+            "error": f"Hospital {hospital_id} is unavailable.",
+            "hospital_id": hospital_id,
+            "status": "offline"
+        }), 503
+    
 @app.route("/api/dashboard", methods=["GET"])
 def dashboard():
 

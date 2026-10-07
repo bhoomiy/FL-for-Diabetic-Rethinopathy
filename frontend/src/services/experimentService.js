@@ -19,7 +19,7 @@ export async function fetchDashboardSummary() {
   });
 }
 
-// POST /experiments — simulated run. No training happens in the browser.
+// POST /experiments/start — starts a real federated learning experiment through the backend.
 const API_BASE = "http://localhost:5000/api";
 
 export async function startExperiment(config) {
@@ -32,7 +32,7 @@ export async function startExperiment(config) {
     learning_rate: config.learningRate,
     mu: config.algorithm === "FedProx" ? config.mu : 0,
     use_class_weights: config.classWeighting,
-    max_batches: null,
+    max_batches: 1,
     test_run: false,
   };
 

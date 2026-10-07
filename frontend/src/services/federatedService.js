@@ -100,3 +100,8 @@ export async function fetchConfusionMatrix(distribution = "iid") {
     `/confusion-matrix?distribution=${distribution}`
   );
 }
+
+// GET /hospitals/:id/status
+export async function fetchHospitalStatus(hospitalId) {
+  return apiRequest(`/hospitals/${hospitalId}/status`);
+}
