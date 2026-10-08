@@ -1,0 +1,22 @@
+{
+  "hospital_id": 2,
+  "base_version": 1,
+  "num_samples": 733,
+  "train_loss": 1.1330353021621704,
+  "train_accuracy": 65.625,
+  "config": {
+    "distribution": "non_iid",
+    "algorithm": "fedprox",
+    "local_epochs": 1,
+    "batch_size": 16,
+    "learning_rate": 0.0005,
+    "max_batches": 2,
+    "mu": 0.01,
+    "use_dp": false
+  },
+  "created_at": "2026-10-08T16:14:49.074751+00:00",
+  "status": "submitted",
+  "decision": "accepted",
+  "submission_id": "fb9ff13a970e437eba090f05c579bf17",
+  "new_version": 2
+}

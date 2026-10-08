@@ -840,7 +840,7 @@ def async_local_train():
         
         # Use the hospital's uploaded dataset when available.
         uploaded_root = ASYNC_STORAGE / "datasets" / "active"
-        uploaded_csv = uploaded_root / "labels.csv"
+        uploaded_csv = uploaded_root / "client.csv"
         uploaded_images = uploaded_root / "images"
 
         custom_dataset_ready = (
@@ -863,6 +863,7 @@ def async_local_train():
             custom_image_dir=(
                 str(uploaded_images) if custom_dataset_ready else None
             ),
+            test_split=0.2 if custom_dataset_ready else 0.0,
         )
 
 
@@ -882,6 +883,13 @@ def async_local_train():
 
         updated_weights, num_samples, loss, accuracy = client.train(
             global_model
+        )
+
+        test_metrics = client.evaluate_local(updated_weights)
+
+        dataset_source = (
+            "uploaded_idrid" if custom_dataset_ready
+            else "existing_aptos_non_iid"
         )
 
         if not math.isfinite(float(loss)) or not math.isfinite(float(accuracy)):
@@ -933,6 +941,8 @@ def async_local_train():
             "config": config,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "status": "pending_submission",
+            "dataset_source": dataset_source,
+            "test_metrics": test_metrics,
         }
 
         temporary_metadata = ASYNC_STORAGE / "pending_update.tmp"
@@ -953,6 +963,8 @@ def async_local_train():
             "train_loss": loss,
             "train_accuracy": accuracy,
             "pending_checkpoint": pending_path.name,
+            "dataset_source": dataset_source,
+            "test_metrics": test_metrics,
             "message": "Local training completed. Update awaits submission."
         })
 

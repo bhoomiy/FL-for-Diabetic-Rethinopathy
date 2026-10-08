@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from sklearn.model_selection import train_test_split
 
 import pandas as pd
 import torch
@@ -27,7 +28,8 @@ class FLClient:
     dp_clip_norm=1.0,
     dp_noise_multiplier=0.1,
     custom_csv=None,
-    custom_image_dir=None
+    custom_image_dir=None,
+    test_split=0.0
     ):
 
         self.client_id = client_id
@@ -109,6 +111,25 @@ class FLClient:
 
         self.df = pd.read_csv(self.client_csv)
 
+        
+        self.test_df = None
+
+        if test_split > 0:
+            if not 0 < test_split < 1:
+                raise ValueError("test_split must be between 0 and 1.")
+
+            train_df, test_df = train_test_split(
+                self.df,
+                test_size=test_split,
+                random_state=42,
+                shuffle=True,
+                stratify=None
+            )
+
+            self.df = train_df.reset_index(drop=True)
+            self.test_df = test_df.reset_index(drop=True)
+
+
         # ======================================================
         # TRANSFORMS
         # ======================================================
@@ -144,6 +165,33 @@ class FLClient:
             shuffle=True,
             num_workers=0
         )
+
+        
+        self.test_loader = None
+
+        if self.test_df is not None:
+            test_transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225]
+                )
+            ])
+
+            test_dataset = DRDataset(
+                self.test_df,
+                str(self.image_dir),
+                test_transform
+            )
+
+            self.test_loader = DataLoader(
+                test_dataset,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=0
+            )
+
 
     # ==========================================================
     # DIFFERENTIAL PRIVACY
@@ -486,3 +534,76 @@ class FLClient:
             train_loss,
             train_accuracy
         )
+
+    
+    def evaluate_local(self, model_weights):
+        """
+        Evaluate trained model weights on the hospital's
+        held-out test images, without data augmentation.
+        """
+        from sklearn.metrics import f1_score
+
+        if self.test_loader is None:
+            return None
+
+        model = DRMobileNetV2(
+            num_classes=5,
+            freeze_features=False,
+            pretrained=False
+        ).to(self.device)
+
+        model.load_state_dict(model_weights, strict=True)
+        model.eval()
+
+        criterion = nn.CrossEntropyLoss()
+
+        total_loss = 0.0
+        total_correct = 0
+        total_samples = 0
+        true_labels = []
+        predicted_labels = []
+
+        with torch.no_grad():
+            for images, labels in self.test_loader:
+                images = images.to(self.device)
+                labels = labels.to(self.device)
+
+                outputs = model(images)
+                loss = criterion(outputs, labels)
+
+                predictions = outputs.argmax(dim=1)
+
+                batch_size = labels.size(0)
+                total_loss += loss.item() * batch_size
+                total_correct += (
+                    predictions == labels
+                ).sum().item()
+                total_samples += batch_size
+
+                true_labels.extend(labels.cpu().tolist())
+                predicted_labels.extend(
+                    predictions.cpu().tolist()
+                )
+
+        if total_samples == 0:
+            raise ValueError("Local test dataset is empty.")
+
+        result = {
+            "test_samples": total_samples,
+            "test_loss": total_loss / total_samples,
+            "test_accuracy": (
+                100.0 * total_correct / total_samples
+            ),
+            "test_macro_f1": float(
+                f1_score(
+                    true_labels,
+                    predicted_labels,
+                    labels=[0, 1, 2, 3, 4],
+                    average="macro",
+                    zero_division=0
+                )
+            ),
+        }
+
+        del model
+        return result

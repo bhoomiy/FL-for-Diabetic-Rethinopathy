@@ -1,0 +1,22 @@
+{
+  "submission_id": "c9ec916d60c3400db2b34427834dcb66",
+  "checkpoint_sha256": "9e47c61c4a9ef5cc54684ba50de7748ebd37277e70b53c3c3c890d7d630ed7d8",
+  "hospital_id": 4,
+  "base_version": 2,
+  "current_version": 2,
+  "num_samples": 90,
+  "created_at": "2026-10-08T20:18:40.387982+00:00",
+  "alpha": 0.030716723549488054,
+  "baseline_metrics": {
+    "accuracy": 0.6256830601092896,
+    "macro_f1": 0.26805687203791473,
+    "validation_samples": 366
+  },
+  "candidate_metrics": {
+    "accuracy": 0.6284153005464481,
+    "macro_f1": 0.2698069226371113,
+    "validation_samples": 366
+  },
+  "decision": "accepted",
+  "new_version": 3
+}

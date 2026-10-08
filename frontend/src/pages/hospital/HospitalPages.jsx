@@ -597,20 +597,100 @@ export function HospitalTrainingPage() {
         </div>
       </ChartCard>
 
+      
       <ChartCard
-        title="Latest Operation Result"
-        subtitle="Actual response from the hospital worker"
+        title="Local Training & Evaluation Results"
+        subtitle="Live results returned by the hospital worker"
       >
         {result ? (
-          <pre className="max-h-80 overflow-auto rounded-lg bg-slate-900 p-4 text-xs text-white">
-            {JSON.stringify(result, null, 2)}
-          </pre>
+          <div className="space-y-5">
+            {result.test_metrics ? (
+              <>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    {
+                      label: "Training Accuracy",
+                      value: `${Number(result.train_accuracy).toFixed(2)}%`,
+                    },
+                    {
+                      label: "Test Accuracy",
+                      value: `${Number(result.test_metrics.test_accuracy).toFixed(2)}%`,
+                    },
+                    {
+                      label: "Test Loss",
+                      value: Number(result.test_metrics.test_loss).toFixed(4),
+                    },
+                    {
+                      label: "Macro F1 Score",
+                      value: Number(result.test_metrics.test_macro_f1).toFixed(4),
+                    },
+                  ].map((metric) => (
+                    <div
+                      key={metric.label}
+                      className="rounded-xl border bg-card p-5 shadow-sm"
+                    >
+                      <p className="text-sm text-muted-foreground">
+                        {metric.label}
+                      </p>
+                      <p className="mt-2 text-2xl font-bold">
+                        {metric.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="rounded-xl border p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Training Images
+                    </p>
+                    <p className="mt-1 text-xl font-semibold">
+                      {result.num_samples}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Test Images
+                    </p>
+                    <p className="mt-1 text-xl font-semibold">
+                      {result.test_metrics.test_samples}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Global Model Version
+                    </p>
+                    <p className="mt-1 text-xl font-semibold">
+                      v{result.base_version}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border p-4">
+                  <p className="font-medium">
+                    {result.message || "Training completed"}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Dataset: {result.dataset_source || "Unknown"}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {result.message || "Operation completed."}
+              </p>
+            )}
+
+          </div>
         ) : (
           <p className="text-sm text-muted-foreground">
             No operation performed in this session.
           </p>
         )}
       </ChartCard>
+
     </div>
   );
 }
