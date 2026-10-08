@@ -75,10 +75,22 @@ class DRDataset(Dataset):
 
     def __getitem__(self, idx):
 
-        image_name = self.df.iloc[idx]["id_code"] + ".png"
-        image_path = os.path.join(self.image_dir, image_name)
+        image_id = str(self.df.iloc[idx]["id_code"]).strip()
+
+        image_path = None
+        for extension in (".png", ".jpg", ".jpeg"):
+            candidate = Path(self.image_dir) / f"{image_id}{extension}"
+            if candidate.is_file():
+                image_path = candidate
+                break
+
+        if image_path is None:
+            raise FileNotFoundError(
+                f"Image not found for {image_id}"
+            )
 
         image = Image.open(image_path).convert("RGB")
+
 
         label = int(self.df.iloc[idx]["diagnosis"])
 

@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AsyncMonitoringRouteImport } from './routes/async-monitoring'
 import { Route as ClassImbalanceRouteImport } from './routes/class-imbalance'
 import { Route as ClassMetricsRouteImport } from './routes/class-metrics'
 import { Route as ClientsRouteImport } from './routes/clients'
@@ -34,6 +35,11 @@ import { Route as HospitalTrainingRouteImport } from './routes/hospital/training
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AsyncMonitoringRoute = AsyncMonitoringRouteImport.update({
+  id: '/async-monitoring',
+  path: '/async-monitoring',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClassImbalanceRoute = ClassImbalanceRouteImport.update({
@@ -139,6 +145,7 @@ const HospitalTrainingRoute = HospitalTrainingRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/async-monitoring': typeof AsyncMonitoringRoute
   '/class-imbalance': typeof ClassImbalanceRoute
   '/class-metrics': typeof ClassMetricsRoute
   '/clients': typeof ClientsRoute
@@ -162,6 +169,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/async-monitoring': typeof AsyncMonitoringRoute
   '/class-imbalance': typeof ClassImbalanceRoute
   '/class-metrics': typeof ClassMetricsRoute
   '/clients': typeof ClientsRoute
@@ -186,6 +194,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/async-monitoring': typeof AsyncMonitoringRoute
   '/class-imbalance': typeof ClassImbalanceRoute
   '/class-metrics': typeof ClassMetricsRoute
   '/clients': typeof ClientsRoute
@@ -211,6 +220,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/async-monitoring'
     | '/class-imbalance'
     | '/class-metrics'
     | '/clients'
@@ -234,6 +244,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/async-monitoring'
     | '/class-imbalance'
     | '/class-metrics'
     | '/clients'
@@ -257,6 +268,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/async-monitoring'
     | '/class-imbalance'
     | '/class-metrics'
     | '/clients'
@@ -281,6 +293,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AsyncMonitoringRoute: typeof AsyncMonitoringRoute
   ClassImbalanceRoute: typeof ClassImbalanceRoute
   ClassMetricsRoute: typeof ClassMetricsRoute
   ClientsRoute: typeof ClientsRoute
@@ -310,6 +323,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/async-monitoring': {
+      id: '/async-monitoring'
+      path: '/async-monitoring'
+      fullPath: '/async-monitoring'
+      preLoaderRoute: typeof AsyncMonitoringRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/class-imbalance': {
@@ -457,6 +477,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AsyncMonitoringRoute: AsyncMonitoringRoute,
   ClassImbalanceRoute: ClassImbalanceRoute,
   ClassMetricsRoute: ClassMetricsRoute,
   ClientsRoute: ClientsRoute,

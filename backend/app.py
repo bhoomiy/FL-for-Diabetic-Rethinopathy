@@ -6,6 +6,10 @@ import json
 from PIL import Image
 from backend.prediction_service import predict_retinal_image
 import requests
+from flask import send_file
+from fl.async_registry import get_model_info
+import tempfile
+from fl.async_aggregation import process_async_update
 
 from fl.fed_train import run_experiment
 
@@ -1034,6 +1038,229 @@ def predict():
         return jsonify({
             "error": str(error)
         }), 500
+
+# ============================================================
+# ASYNCHRONOUS FL — GLOBAL MODEL REGISTRY
+# ============================================================
+
+@app.route("/api/async/model/info", methods=["GET"])
+def async_model_info():
+    try:
+        metadata, checkpoint_path = get_model_info()
+
+        return jsonify({
+            "status": "success",
+            "version": metadata["version"],
+            "checkpoint": metadata["checkpoint"],
+            "created_at": metadata["created_at"],
+            "source_checkpoint": metadata["source_checkpoint"],
+            "download_url": "/api/async/model/download"
+        })
+
+    except Exception as error:
+        return jsonify({
+            "status": "error",
+            "message": str(error)
+        }), 500
+
+
+@app.route("/api/async/model/download", methods=["GET"])
+def async_model_download():
+    try:
+        metadata, checkpoint_path = get_model_info()
+
+        response = send_file(
+            checkpoint_path,
+            as_attachment=True,
+            download_name=f"global_v{metadata['version']}.pth",
+            mimetype="application/octet-stream"
+        )
+
+        response.headers["X-Global-Model-Version"] = str(
+            metadata["version"]
+        )
+        response.headers["Cache-Control"] = "no-store"
+
+        return response
+
+    except Exception as error:
+        return jsonify({
+            "status": "error",
+            "message": str(error)
+        }), 500
+
+
+# ============================================================
+# ASYNCHRONOUS FL — HOSPITAL UPDATE SUBMISSION
+# ============================================================
+
+@app.route("/api/async/submit", methods=["POST"])
+def async_submit_update():
+
+    required_fields = (
+        "hospital_id",
+        "base_version",
+        "num_samples",
+    )
+
+    if "model" not in request.files:
+        return jsonify({
+            "status": "error",
+            "message": "Missing model checkpoint."
+        }), 400
+
+    for field in required_fields:
+        if field not in request.form:
+            return jsonify({
+                "status": "error",
+                "message": f"Missing field: {field}"
+            }), 400
+
+    try:
+        hospital_id = int(request.form["hospital_id"])
+        base_version = int(request.form["base_version"])
+        num_samples = int(request.form["num_samples"])
+
+    except (TypeError, ValueError):
+        return jsonify({
+            "status": "error",
+            "message": "Invalid submission metadata."
+        }), 400
+
+    if hospital_id not in range(1, 5):
+        return jsonify({
+            "status": "error",
+            "message": "Hospital ID must be between 1 and 4."
+        }), 400
+
+    if base_version < 0 or num_samples <= 0:
+        return jsonify({
+            "status": "error",
+            "message": "Invalid version or sample count."
+        }), 400
+
+    # Limit uploaded checkpoint size.
+    # The MobileNetV2 state_dict is approximately 9 MB.
+    maximum_bytes = 30 * 1024 * 1024
+    uploaded = request.files["model"]
+
+    with tempfile.NamedTemporaryFile(
+        suffix=".pth",
+        delete=False,
+    ) as temporary_file:
+        temporary_path = Path(temporary_file.name)
+
+    try:
+        bytes_received = 0
+
+        with open(temporary_path, "wb") as destination:
+            while True:
+                chunk = uploaded.stream.read(1024 * 1024)
+
+                if not chunk:
+                    break
+
+                bytes_received += len(chunk)
+
+                if bytes_received > maximum_bytes:
+                    return jsonify({
+                        "status": "error",
+                        "message": "Checkpoint exceeds 30 MB."
+                    }), 413
+
+                destination.write(chunk)
+
+        result = process_async_update(
+            checkpoint_path=temporary_path,
+            hospital_id=hospital_id,
+            base_version=base_version,
+            num_samples=num_samples,
+        )
+
+        return jsonify({
+            "status": "success",
+            **result,
+        })
+
+    except ValueError as error:
+        return jsonify({
+            "status": "error",
+            "message": str(error),
+        }), 400
+
+    except RuntimeError as error:
+        return jsonify({
+            "status": "error",
+            "message": str(error),
+        }), 409
+
+    except Exception as error:
+        app.logger.exception("Async submission failed")
+
+        return jsonify({
+            "status": "error",
+            "message": str(error),
+        }), 500
+
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+# ASYNCHRONOUS FL — MONITORING DASHBOARD
+
+@app.route("/api/async/dashboard", methods=["GET"])
+def async_monitoring_dashboard():
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    async_dir = root / "results" / "async_fl"
+    metadata_path = async_dir / "metadata.json"
+    audit_path = async_dir / "audit_log.jsonl"
+
+    if not metadata_path.is_file():
+        return jsonify({
+            "status": "unavailable",
+            "message": "Async model registry not initialized"
+        }), 404
+
+    with open(metadata_path, encoding="utf-8") as f:
+        metadata = json.load(f)
+
+    events = []
+
+    if audit_path.is_file():
+        with open(audit_path, encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    events.append(json.loads(line))
+
+    accepted = [
+        e for e in events if e.get("decision") == "accepted"
+    ]
+    rejected = [
+        e for e in events
+        if str(e.get("decision", "")).startswith("rejected")
+    ]
+
+    latest_metrics = None
+    for event in reversed(accepted):
+        if event.get("new_version") == metadata.get("version"):
+            latest_metrics = event.get("candidate_metrics")
+            break
+
+    return jsonify({
+        "status": "success",
+        "version": metadata["version"],
+        "checkpoint": metadata["checkpoint"],
+        "hospital_count": 4,
+        "total_submissions": len(events),
+        "accepted_count": len(accepted),
+        "rejected_count": len(rejected),
+        "latest_metrics": latest_metrics,
+        "events": list(reversed(events))
+    })
+
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)

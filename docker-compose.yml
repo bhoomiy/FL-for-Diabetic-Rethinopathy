@@ -5,6 +5,7 @@ services:
     container_name: fedretina-hospital-1
     environment:
       CLIENT_ID: "1"
+      ASYNC_SERVER_URL: "http://host.docker.internal:5000"
       DR_IMAGE_DIR: /app/datasets/train_images/train_images
     ports:
       - "5001:5000"
@@ -12,6 +13,7 @@ services:
       - ./datasets/clients/client_1.csv:/app/datasets/clients/client_1.csv:ro
       - ./datasets/clients_non_iid/client_1.csv:/app/datasets/clients_non_iid/client_1.csv:ro
       - ./datasets/train_images/train_images:/app/datasets/train_images/train_images:ro
+      - ./docker_data/async/hospital_1:/app/async_storage
 
   hospital-2:
     image: fedretina-hospital
@@ -19,12 +21,14 @@ services:
     environment:
       CLIENT_ID: "2"
       DR_IMAGE_DIR: /app/datasets/train_images/train_images
+      ASYNC_SERVER_URL: "http://host.docker.internal:5000"
     ports:
       - "5002:5000"
     volumes:
       - ./datasets/clients/client_2.csv:/app/datasets/clients/client_2.csv:ro
       - ./datasets/clients_non_iid/client_2.csv:/app/datasets/clients_non_iid/client_2.csv:ro
       - ./datasets/train_images/train_images:/app/datasets/train_images/train_images:ro
+      - ./docker_data/async/hospital_2:/app/async_storage
 
   hospital-3:
     image: fedretina-hospital
@@ -32,12 +36,14 @@ services:
     environment:
       CLIENT_ID: "3"
       DR_IMAGE_DIR: /app/datasets/train_images/train_images
+      ASYNC_SERVER_URL: "http://host.docker.internal:5000"
     ports:
       - "5003:5000"
     volumes:
       - ./datasets/clients/client_3.csv:/app/datasets/clients/client_3.csv:ro
       - ./datasets/clients_non_iid/client_3.csv:/app/datasets/clients_non_iid/client_3.csv:ro
       - ./datasets/train_images/train_images:/app/datasets/train_images/train_images:ro
+      - ./docker_data/async/hospital_3:/app/async_storage
 
   hospital-4:
     image: fedretina-hospital
@@ -45,9 +51,11 @@ services:
     environment:
       CLIENT_ID: "4"
       DR_IMAGE_DIR: /app/datasets/train_images/train_images
+      ASYNC_SERVER_URL: "http://host.docker.internal:5000"
     ports:
       - "5004:5000"
     volumes:
       - ./datasets/clients/client_4.csv:/app/datasets/clients/client_4.csv:ro
       - ./datasets/clients_non_iid/client_4.csv:/app/datasets/clients_non_iid/client_4.csv:ro
       - ./datasets/train_images/train_images:/app/datasets/train_images/train_images:ro
+      - ./docker_data/async/hospital_4:/app/async_storage

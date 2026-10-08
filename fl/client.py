@@ -25,7 +25,9 @@ class FLClient:
     learning_rate=0.0005,
     use_dp=False,
     dp_clip_norm=1.0,
-    dp_noise_multiplier=0.1
+    dp_noise_multiplier=0.1,
+    custom_csv=None,
+    custom_image_dir=None
     ):
 
         self.client_id = client_id
@@ -50,24 +52,34 @@ class FLClient:
         # clients_non_iid  -> Non-IID
         self.client_folder = client_folder
 
+        
         self.client_csv = (
-            self.base_dir
-            / "datasets"
-            / client_folder
-            / f"client_{client_id}.csv"
+            Path(custom_csv)
+            if custom_csv is not None
+            else (
+                self.base_dir
+                / "datasets"
+                / client_folder
+                / f"client_{client_id}.csv"
+            )
         )
 
-        self.image_dir = Path(
-            os.getenv(
-                "DR_IMAGE_DIR",
-                str(
-                    self.base_dir
-                    / "datasets"
-                    / "train_images"
-                    / "train_images"
+        self.image_dir = (
+            Path(custom_image_dir)
+            if custom_image_dir is not None
+            else Path(
+                os.getenv(
+                    "DR_IMAGE_DIR",
+                    str(
+                        self.base_dir
+                        / "datasets"
+                        / "train_images"
+                        / "train_images"
+                    )
                 )
             )
         )
+
 
         # ======================================================
         # DEVICE

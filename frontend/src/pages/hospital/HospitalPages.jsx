@@ -26,301 +26,438 @@ function NoClient() {
   return <EmptyState title="No hospital linked" description="This account is not associated with a federated client." />;
 }
 
+
 export function HospitalDashboardPage() {
   const { user } = useAuth();
 
-  const [client, setClient] = useState(null);
-  const [dashboardData, setDashboardData] = useState(null);
-  const [distribution, setDistribution] = useState(null);
-  const [runtimeStatus, setRuntimeStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const clientId = Number(
+    String(user?.clientId ?? "").replace("client-", "")
+  );
 
-  useEffect(() => {
-    async function loadHospitalData() {
-      try {
-        const clientId = Number(
-          String(user?.clientId).replace("client-", "")
-        );
-        const [
-          clientsData,
-          dashboard,
-          distributionData,
-          hospitalStatus,
-        ] = await Promise.all([
-          fetchClients(),
-          fetchDashboard(),
-          fetchDataDistribution(),
-          fetchHospitalStatus(clientId),
+  const validHospital = clientId >= 1 && clientId <= 4;
+
+  const [model, setModel] = useState(null);
+  const [hospital, setHospital] = useState(null);
+  const [dataset, setDataset] = useState(null);
+  const [monitoring, setMonitoring] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function loadDashboard() {
+    setLoading(true);
+    setError("");
+
+    try {
+      if (!validHospital) {
+        throw new Error("No hospital linked to this account.");
+      }
+
+      const workerUrl = `http://localhost:${5000 + clientId}`;
+
+      const [modelResponse, healthResponse, datasetResponse, monitoringResponse] =
+        await Promise.all([
+          fetch("http://localhost:5000/api/async/model/info"),
+          fetch(`${workerUrl}/health`),
+          fetch(`${workerUrl}/async/dataset`),
+          fetch("http://localhost:5000/api/async/dashboard"),
         ]);
 
-        
-        const currentClient = clientsData.find(
-          (item) => Number(item.id) === clientId
-        );
-
-        if (!currentClient) {
-          setClient(null);
-          return;
+      for (const response of [
+        modelResponse,
+        healthResponse,
+        datasetResponse,
+        monitoringResponse,
+      ]) {
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status}`);
         }
-
-        const distributionKey =
-          dashboard?.distribution === "non_iid"
-            ? "non_iid"
-            : "iid";
-
-        const partition = distributionData[distributionKey]?.find(
-          (item) => Number(item.id) === clientId
-        );
-
-        const classDistribution = {};
-
-        partition?.classes?.forEach((item) => {
-          if (item.className === "No DR") {
-            classDistribution.no_dr = item.count;
-          }
-
-          if (item.className === "Mild") {
-            classDistribution.mild = item.count;
-          }
-
-          if (item.className === "Moderate") {
-            classDistribution.moderate = item.count;
-          }
-
-          if (item.className === "Severe") {
-            classDistribution.severe = item.count;
-          }
-
-          if (item.className === "Proliferative DR") {
-            classDistribution.proliferative = item.count;
-          }
-        });
-
-        setClient(currentClient);
-        setDashboardData(dashboard);
-        setRuntimeStatus(hospitalStatus);
-        setDistribution(classDistribution);
-      } catch (error) {
-        console.error("Failed to load hospital dashboard:", error);
-      } finally {
-        setLoading(false);
       }
-    }
 
-    if (user?.clientId) {
-      loadHospitalData();
-    } else {
+      const [modelData, healthData, datasetData, monitoringData] =
+        await Promise.all([
+          modelResponse.json(),
+          healthResponse.json(),
+          datasetResponse.json(),
+          monitoringResponse.json(),
+        ]);
+
+      setModel(modelData);
+      setHospital(healthData);
+      setDataset(datasetData);
+      setMonitoring(monitoringData);
+    } catch (err) {
+      setError(err.message);
+    } finally {
       setLoading(false);
     }
-  }, [user?.clientId]);
-
-  if (loading) {
-    return (
-      <EmptyState
-        title="Loading hospital"
-        description="Loading federated client data."
-      />
-    );
   }
 
-  if (!client) return <NoClient />;
+  useEffect(() => {
+    loadDashboard();
+  }, [clientId]);
+
+  const submissions =
+    monitoring?.events?.filter(
+      (event) => Number(event.hospital_id) === clientId
+    ) ?? [];
+
+  const latestSubmission = submissions[0];
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={`Federated client ${client.id}`}
-        title={client.name}
-        description="Your local contribution to the federated diabetic retinopathy network."
+        eyebrow={`FEDERATED CLIENT ${validHospital ? clientId : "—"}`}
+        title={`Hospital ${validHospital ? clientId : ""} Dashboard`}
+        description="Live hospital participation in the asynchronous federated learning network."
         actions={
-        <StatusBadge
-          tone={
-            runtimeStatus?.status === "completed"
-              ? "success"
-              : runtimeStatus?.status === "training"
-                ? "info"
-                : "neutral"
-          }
-          dot
-        >
-          {runtimeStatus?.status === "completed"
-            ? "Completed"
-            : runtimeStatus?.status === "training"
-              ? "Training"
-              : "Idle"}
-        </StatusBadge>
-      }
+          <button
+            type="button"
+            onClick={loadDashboard}
+            disabled={loading}
+            className="rounded-lg bg-pink-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+        }
       />
+
+      {error && (
+        <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="Local samples"
-          value={String(client.samples)}
-          hint="APTOS retinal images on site"
+          label="Hospital Status"
+          value={hospital?.status ?? "Unavailable"}
+          hint="Live Docker worker health"
         />
-
         <MetricCard
-          label="Local epochs"
-          value={String(dashboardData?.local_epochs ?? "—")}
-          hint="Per communication round"
+          label="Global Model"
+          value={model ? `v${model.version}` : "—"}
+          hint="Latest server version"
         />
-
         <MetricCard
-          label="Contribution weight"
-          value={`${(client.contributionWeight * 100).toFixed(2)}%`}
-          hint="In weighted aggregation"
+          label="Custom Dataset"
+          value={dataset?.status === "ready" ? String(dataset.samples) : "None"}
+          hint="Uploaded images on this worker"
         />
-
         <MetricCard
-          label="Latest experiment"
-          value={dashboardData?.experiment_id ?? "—"}
-          hint={
-            dashboardData?.distribution
-              ? `${dashboardData.distribution.toUpperCase()} · ${dashboardData.algorithm}`
-              : "No completed experiment"
-          }
+          label="Submitted Updates"
+          value={String(submissions.length)}
+          hint="Recorded asynchronous submissions"
         />
       </div>
 
       <ChartCard
-        title="Your local class distribution"
-        subtitle={
-          dashboardData?.distribution === "non_iid"
-            ? "Non-IID partition used by the latest experiment"
-            : "IID partition used by the latest experiment"
-        }
-        footer="Class counts loaded from this hospital's real APTOS client partition."
+        title="Latest Hospital Contribution"
+        subtitle="Recorded server-side aggregation decision"
       >
-        <DistributionChart
-          data={[
-            {
-              client: client.name,
-              ...(distribution ?? {}),
-            },
-          ]}
-          height={260}
-        />
+        {latestSubmission ? (
+          <div className="space-y-3 text-sm">
+            <p>
+              <strong>Base model:</strong> v{latestSubmission.base_version}
+            </p>
+            <p>
+              <strong>Decision:</strong>{" "}
+              {latestSubmission.decision.replaceAll("_", " ")}
+            </p>
+            <p>
+              <strong>Resulting global version:</strong>{" "}
+              v{latestSubmission.new_version}
+            </p>
+            <p>
+              <strong>Candidate macro F1:</strong>{" "}
+              {latestSubmission.candidate_metrics?.macro_f1 != null
+                ? `${(latestSubmission.candidate_metrics.macro_f1 * 100).toFixed(2)}%`
+                : "Not evaluated"}
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No asynchronous submissions recorded for this hospital.
+          </p>
+        )}
+      </ChartCard>
+
+      <ChartCard
+        title="Federated Learning Workflow"
+        subtitle="How this hospital participates"
+      >
+        <div className="grid gap-3 md:grid-cols-3">
+          {[
+            ["1. Synchronize", "Download the latest global checkpoint."],
+            ["2. Train Locally", "Train the model using local retinal images."],
+            ["3. Submit Update", "Send model parameters for server evaluation."],
+          ].map(([title, description]) => (
+            <div key={title} className="rounded-xl border border-border p-4">
+              <h3 className="font-semibold">{title}</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {description}
+              </p>
+            </div>
+          ))}
+        </div>
       </ChartCard>
     </div>
   );
 }
 
+
+
 export function HospitalDatasetPage() {
   const { user } = useAuth();
 
-  const [distribution, setDistribution] = useState(null);
-  const [distributionType, setDistributionType] = useState(null);
+  const clientId = Number(
+    String(user?.clientId ?? "").replace("client-", "")
+  );
+
+  const validHospital = clientId >= 1 && clientId <= 4;
+  const workerUrl = `http://localhost:${5000 + clientId}`;
+
+  const [file, setFile] = useState(null);
+  const [dataset, setDataset] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    async function loadDataset() {
-      try {
-        const [dashboard, distributionData] = await Promise.all([
-          fetchDashboard(),
-          fetchDataDistribution(),
-        ]);
-
-        const clientId = Number(
-          String(user?.clientId).replace("client-", "")
-        );
-
-        const distributionKey =
-          dashboard?.distribution === "non_iid"
-            ? "non_iid"
-            : "iid";
-
-        const hospitalPartition = distributionData[distributionKey]?.find(
-          (item) => Number(item.id) === clientId
-        );
-
-        setDistribution(hospitalPartition ?? null);
-        setDistributionType(distributionKey);
-      } catch (error) {
-        console.error("Failed to load local dataset:", error);
-        setDistribution(null);
-      } finally {
-        setLoading(false);
-      }
+  async function refreshDataset() {
+    if (!validHospital) {
+      setError("No valid hospital is linked to this account.");
+      setLoading(false);
+      return;
     }
 
-    if (user?.clientId) {
-      loadDataset();
-    } else {
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${workerUrl}/async/dataset`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Could not load dataset.");
+      }
+
+      setDataset(data);
+      setError("");
+    } catch (err) {
+      setError(err.message);
+    } finally {
       setLoading(false);
     }
-  }, [user?.clientId]);
-
-  if (loading) {
-    return (
-      <EmptyState
-        title="Loading local dataset"
-        description="Loading this hospital's APTOS partition."
-      />
-    );
   }
 
-  if (!distribution) return <NoClient />;
+  useEffect(() => {
+    refreshDataset();
+  }, [clientId]);
 
-  const classCounts = {};
+  async function uploadDataset() {
+    if (!file || uploading || !validHospital) return;
 
-  distribution.classes.forEach((item) => {
-    if (item.className === "No DR") {
-      classCounts.no_dr = item.count;
+    setUploading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const formData = new FormData();
+      formData.append("dataset", file);
+
+      const response = await fetch(
+        `${workerUrl}/async/dataset/upload`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Dataset upload failed.");
+      }
+
+      setMessage(
+        `Dataset uploaded successfully to Hospital ${clientId}.`
+      );
+
+      setFile(null);
+      await refreshDataset();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
     }
+  }
 
-    if (item.className === "Mild") {
-      classCounts.mild = item.count;
-    }
+  const sampleCount = dataset?.samples ?? 0;
+  const classDistribution =
+    dataset?.class_distribution ??
+    dataset?.distribution ??
+    dataset?.class_counts ??
+    null;
 
-    if (item.className === "Moderate") {
-      classCounts.moderate = item.count;
-    }
+  const distributionEntries = Array.isArray(classDistribution)
+    ? classDistribution.map((count, index) => [String(index), count])
+    : classDistribution && typeof classDistribution === "object"
+      ? Object.entries(classDistribution)
+      : [];
 
-    if (item.className === "Severe") {
-      classCounts.severe = item.count;
-    }
-
-    if (item.className === "Proliferative DR") {
-      classCounts.proliferative = item.count;
-    }
-  });
-
-  const total = distribution.samples;
+  const classNames = [
+    "No DR",
+    "Mild",
+    "Moderate",
+    "Severe",
+    "Proliferative DR",
+  ];
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="My hospital"
-        title="Local dataset"
-        description="Retinal fundus images stored on your hospital infrastructure. These images never leave your network."
-        actions={
-          <StatusBadge tone="info">
-            {distributionType === "non_iid" ? "Non-IID" : "IID"} partition
-          </StatusBadge>
-        }
+        eyebrow={`HOSPITAL ${validHospital ? clientId : "—"}`}
+        title="Local Dataset"
+        description="Upload and manage the hospital's private retinal image dataset."
       />
 
-      <ChartCard
-        title="Class breakdown"
-        subtitle={`${total} APTOS images in this hospital`}
-        footer={`Class counts loaded from the real ${
-          distributionType === "non_iid" ? "Non-IID" : "IID"
-        } client partition.`}
-      >
-        <ul className="space-y-4">
-          {DR_CLASSES.map((c) => {
-            const count = classCounts[c.key] ?? 0;
+      {error && (
+        <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
-            return (
-              <PerformanceBar
-                key={c.key}
-                label={c.label}
-                value={total > 0 ? count / total : 0}
-                suffix={`(${count} images)`}
-              />
-            );
-          })}
-        </ul>
-      </ChartCard>
+      {message && (
+        <div className="rounded-xl border border-green-300 bg-green-50 p-4 text-sm text-green-700">
+          {message}
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <MetricCard
+          label="Hospital"
+          value={validHospital ? `Hospital ${clientId}` : "—"}
+          hint="Local federated client"
+        />
+
+        <MetricCard
+          label="Uploaded Images"
+          value={loading ? "Loading..." : String(sampleCount)}
+          hint="Custom uploaded dataset"
+        />
+
+        <MetricCard
+          label="Dataset Status"
+          value={loading ? "Loading..." : dataset?.status ?? "Unknown"}
+          hint="Reported by hospital worker"
+        />
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-6">
+        <h2 className="text-lg font-semibold">Upload Retinal Dataset</h2>
+
+        <p className="mt-2 text-sm text-muted-foreground">
+          Select the ZIP archive containing this hospital's retinal images
+          and labels.csv file. Images are uploaded to the hospital worker.
+        </p>
+
+        <div className="mt-5 space-y-4">
+          <input
+            type="file"
+            accept=".zip,application/zip"
+            disabled={uploading}
+            onChange={(event) => {
+              setFile(event.target.files?.[0] ?? null);
+              setMessage("");
+              setError("");
+            }}
+            className="block w-full rounded-lg border border-border p-3 text-sm"
+          />
+
+          {file && (
+            <p className="text-sm text-muted-foreground">
+              Selected: {file.name} (
+              {(file.size / (1024 * 1024)).toFixed(2)} MB)
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={uploadDataset}
+              disabled={!file || uploading || !validHospital}
+              className="rounded-lg bg-pink-600 px-5 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {uploading ? "Uploading..." : "Upload Dataset"}
+            </button>
+
+            <button
+              type="button"
+              onClick={refreshDataset}
+              disabled={loading || uploading}
+              className="rounded-lg border border-border px-5 py-2.5 text-sm font-medium disabled:opacity-50"
+            >
+              {loading ? "Refreshing..." : "Refresh Dataset"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-6">
+        <h2 className="text-lg font-semibold">Uploaded Dataset Details</h2>
+
+        <div className="mt-4 space-y-3 text-sm">
+          <p>
+            <strong>Status:</strong> {dataset?.status ?? "Unknown"}
+          </p>
+          <p>
+            <strong>Image count:</strong> {sampleCount}
+          </p>
+          <p>
+            <strong>Hospital ID:</strong> {validHospital ? clientId : "—"}
+          </p>
+        </div>
+
+        {distributionEntries.length > 0 ? (
+          <div className="mt-5 space-y-3">
+            <h3 className="font-semibold">Class Distribution</h3>
+
+            {distributionEntries.map(([classId, count]) => {
+              const numericClass = Number(classId);
+              const label = Number.isInteger(numericClass) &&
+                numericClass >= 0 && numericClass <= 4
+                  ? classNames[numericClass]
+                  : classId;
+
+              const percentage = sampleCount > 0
+                ? (Number(count) / sampleCount) * 100
+                : 0;
+
+              return (
+                <div key={classId}>
+                  <div className="mb-1 flex justify-between text-sm">
+                    <span>{label}</span>
+                    <span>{count} images</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-pink-100">
+                    <div
+                      className="h-full rounded-full bg-pink-500"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, percentage))}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-muted-foreground">
+            {sampleCount > 0
+              ? "Dataset uploaded. Class counts are not included in the current dataset API response."
+              : "No custom dataset uploaded yet."}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -328,381 +465,357 @@ export function HospitalDatasetPage() {
 export function HospitalTrainingPage() {
   const { user } = useAuth();
 
-  const [dashboardData, setDashboardData] = useState(null);
-  const [client, setClient] = useState(null);
-  const [runtimeStatus, setRuntimeStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const clientId = Number(
+    String(user?.clientId ?? "").replace("client-", "")
+  );
 
-  useEffect(() => {
-    async function loadTrainingData() {
-      try {
-        const clientId = Number(
-          String(user?.clientId).replace("client-", "")
+  const [busy, setBusy] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
+
+  const validHospital = clientId >= 1 && clientId <= 4;
+  const workerUrl = `http://localhost:${5000 + clientId}`;
+
+  async function runAction(action) {
+    if (!validHospital) return;
+
+    setBusy(action);
+    setMessage("");
+    setError("");
+
+    try {
+      const response = await fetch(
+        `${workerUrl}/async/${action}`,
+        { method: "POST" }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || data.status === "error") {
+        throw new Error(
+          data.message || data.error || `${action} failed.`
         );
-
-        const [dashboard, clientsData, hospitalStatus] =
-          await Promise.all([
-            fetchDashboard(),
-            fetchClients(),
-            fetchHospitalStatus(clientId),
-          ]);
-
-        const currentClient = clientsData.find(
-          (item) => Number(item.id) === clientId
-        );
-
-        setDashboardData(dashboard);
-        setClient(currentClient ?? null);
-        setRuntimeStatus(hospitalStatus);
-      } catch (error) {
-        console.error(
-          "Failed to load hospital training data:",
-          error
-        );
-      } finally {
-        setLoading(false);
       }
+
+      setResult(data);
+
+      if (action === "sync") {
+        setMessage("Latest global model synchronized successfully.");
+      } else if (action === "train") {
+        setMessage("Local training completed successfully.");
+      } else {
+        setMessage(
+          `Update submitted. Server decision: ${
+            data.decision?.status ??
+            data.decision ??
+            data.status ??
+            "See response below"
+          }`
+        );
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy("");
     }
-
-    if (user?.clientId) {
-      loadTrainingData();
-    } else {
-      setLoading(false);
-    }
-  }, [user?.clientId]);
-
-  if (loading) {
-    return (
-      <EmptyState
-        title="Loading training data"
-        description="Loading this hospital's Docker runtime state."
-      />
-    );
   }
-
-  if (!client || !dashboardData || !runtimeStatus) {
-    return <NoClient />;
-  }
-
-  const runtimeState = runtimeStatus.status ?? "idle";
-
-  const statusTone =
-    runtimeState === "completed"
-      ? "success"
-      : runtimeState === "training"
-        ? "info"
-        : "neutral";
-
-  const statusLabel =
-    runtimeState === "completed"
-      ? "Completed"
-      : runtimeState === "training"
-        ? "Training"
-        : "Idle";
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="My hospital"
-        title="Local training"
-        description="Live training state reported by this hospital's Docker worker."
+        eyebrow={`Federated Client ${clientId}`}
+        title="Local Training"
+        description="Independently train and submit a hospital model update."
         actions={
-          <StatusBadge tone={statusTone} dot>
-            {statusLabel}
+          <StatusBadge tone={busy ? "info" : "success"} dot>
+            {busy ? `${busy} in progress` : "Ready"}
           </StatusBadge>
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label="Completed training requests"
-          value={String(
-            runtimeStatus.completed_training_requests ?? 0
-          )}
-          hint="Since this hospital container started"
-        />
+      {error && (
+        <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
-        <MetricCard
-          label="Local epochs"
-          value={
-            runtimeStatus.local_epochs != null
-              ? String(runtimeStatus.local_epochs)
-              : "—"
-          }
-          hint="Latest Docker training request"
-        />
-
-        <MetricCard
-          label="Local training accuracy"
-          value={
-            runtimeStatus.train_accuracy != null
-              ? `${Number(runtimeStatus.train_accuracy).toFixed(2)}%`
-              : "—"
-          }
-          hint="Latest local training result"
-        />
-
-        <MetricCard
-          label="Local training loss"
-          value={
-            runtimeStatus.train_loss != null
-              ? Number(runtimeStatus.train_loss).toFixed(4)
-              : "—"
-          }
-          hint="Latest local training result"
-        />
-      </div>
+      {message && (
+        <div className="rounded-xl border border-green-300 bg-green-50 p-4 text-sm text-green-700">
+          {message}
+        </div>
+      )}
 
       <ChartCard
-        title="Docker training state"
-        subtitle={`${client.name} runtime information`}
+        title="Asynchronous Training Workflow"
+        subtitle="Each hospital operates independently"
       >
-        <div className="space-y-4 text-sm">
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <span className="text-muted-foreground">
-              Global model received
-            </span>
-
-            <StatusBadge
-              tone={
-                runtimeStatus.global_model_received
-                  ? "success"
-                  : "neutral"
-              }
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            {
+              action: "sync",
+              title: "1. Synchronize",
+              description: "Download the latest global model.",
+            },
+            {
+              action: "train",
+              title: "2. Train Locally",
+              description: "Train using this hospital's retinal images.",
+            },
+            {
+              action: "submit",
+              title: "3. Submit Update",
+              description: "Send model parameters for server evaluation.",
+            },
+          ].map((step) => (
+            <div
+              key={step.action}
+              className="rounded-xl border border-border p-5"
             >
-              {runtimeStatus.global_model_received ? "Yes" : "No"}
-            </StatusBadge>
-          </div>
+              <h3 className="font-semibold">{step.title}</h3>
 
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <span className="text-muted-foreground">
-              Distribution
-            </span>
+              <p className="mt-2 min-h-12 text-sm text-muted-foreground">
+                {step.description}
+              </p>
 
-            <span className="font-medium text-foreground">
-              {runtimeStatus.distribution
-                ? runtimeStatus.distribution
-                    .replace("_", "-")
-                    .toUpperCase()
-                : "—"}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <span className="text-muted-foreground">
-              Algorithm
-            </span>
-
-            <span className="font-medium text-foreground">
-              {runtimeStatus.algorithm
-                ? runtimeStatus.algorithm.toUpperCase()
-                : "—"}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <span className="text-muted-foreground">
-              Local samples
-            </span>
-
-            <span className="font-medium text-foreground">
-              {runtimeStatus.num_samples ?? "—"}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">
-              Learning rate
-            </span>
-
-            <span className="font-medium text-foreground">
-              {runtimeStatus.learning_rate ?? "—"}
-            </span>
-          </div>
+              <button
+                type="button"
+                disabled={Boolean(busy) || !validHospital}
+                onClick={() => runAction(step.action)}
+                className="mt-4 w-full rounded-lg bg-pink-600 px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {busy === step.action
+                  ? "Processing..."
+                  : step.action === "sync"
+                    ? "Sync Global Model"
+                    : step.action === "train"
+                      ? "Start Training"
+                      : "Submit Update"}
+              </button>
+            </div>
+          ))}
         </div>
+      </ChartCard>
+
+      <ChartCard
+        title="Latest Operation Result"
+        subtitle="Actual response from the hospital worker"
+      >
+        {result ? (
+          <pre className="max-h-80 overflow-auto rounded-lg bg-slate-900 p-4 text-xs text-white">
+            {JSON.stringify(result, null, 2)}
+          </pre>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No operation performed in this session.
+          </p>
+        )}
       </ChartCard>
     </div>
   );
 }
 
+
 export function HospitalGlobalModelPage() {
   const { user } = useAuth();
+  const clientId = Number(
+    String(user?.clientId ?? "").replace("client-", "")
+  );
 
-  const [dashboardData, setDashboardData] = useState(null);
-  const [client, setClient] = useState(null);
-  const [runtimeStatus, setRuntimeStatus] = useState(null);
+  const [model, setModel] = useState(null);
+  const [hospital, setHospital] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
-  useEffect(() => {
-    async function loadGlobalModel() {
-      try {
-        const clientId = Number(
-          String(user?.clientId).replace("client-", "")
-        );
+  async function loadModel() {
+    setError("");
 
-        const [dashboard, clientsData, hospitalStatus] =
-          await Promise.all([
-            fetchDashboard(),
-            fetchClients(),
-            fetchHospitalStatus(clientId),
-          ]);
+    try {
+      const modelResponse = await fetch(
+        "http://localhost:5000/api/async/model/info"
+      );
 
-        const currentClient = clientsData.find(
-          (item) => Number(item.id) === clientId
-        );
-
-        setDashboardData(dashboard);
-        setClient(currentClient ?? null);
-        setRuntimeStatus(hospitalStatus);
-      } catch (error) {
-        console.error(
-          "Failed to load global model data:",
-          error
-        );
-      } finally {
-        setLoading(false);
+      if (!modelResponse.ok) {
+        throw new Error("Could not load global model.");
       }
-    }
 
-    if (user?.clientId) {
-      loadGlobalModel();
-    } else {
+      const modelData = await modelResponse.json();
+      setModel(modelData);
+
+      if (clientId >= 1 && clientId <= 4) {
+        const workerResponse = await fetch(
+          `http://localhost:${5000 + clientId}/health`
+        );
+
+        if (!workerResponse.ok) {
+          throw new Error("Hospital worker is unavailable.");
+        }
+
+        setHospital(await workerResponse.json());
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
       setLoading(false);
     }
-  }, [user?.clientId]);
+  }
+
+  useEffect(() => {
+    loadModel();
+  }, [clientId]);
+
+  async function syncModel() {
+    if (clientId < 1 || clientId > 4) return;
+
+    setSyncing(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await fetch(
+        `http://localhost:${5000 + clientId}/async/sync`,
+        { method: "POST" }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || result.status === "error") {
+        throw new Error(
+          result.message || result.error || "Synchronization failed."
+        );
+      }
+
+      setMessage(
+        `Hospital ${clientId} synchronized successfully.`
+      );
+
+      await loadModel();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   if (loading) {
     return (
       <EmptyState
         title="Loading global model"
-        description="Loading federated model information."
+        description="Connecting to the asynchronous FL server."
       />
     );
   }
 
-  if (!client || !dashboardData || !runtimeStatus) {
-    return <NoClient />;
-  }
-
-  const algorithm = dashboardData.algorithm ?? "—";
-
-  const algorithmHint =
-    algorithm.toLowerCase() === "fedprox"
-      ? `μ = ${dashboardData.mu ?? "—"}`
-      : "Weighted aggregation";
-
-  const receivedGlobalModel =
-    runtimeStatus.global_model_received === true;
-
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="My hospital"
-        title="Global model"
-        description="The shared model produced by aggregating updates from participating hospitals."
+        eyebrow="Asynchronous Federated Learning"
+        title="Global Model"
+        description="Live global model information from the central server."
         actions={
-          <StatusBadge
-            tone={receivedGlobalModel ? "success" : "neutral"}
-            dot
-          >
-            {receivedGlobalModel
-              ? "Model received"
-              : "Not received"}
+          <StatusBadge tone={model ? "success" : "neutral"} dot>
+            {model ? "Server connected" : "Unavailable"}
           </StatusBadge>
         }
       />
 
+      {error && (
+        <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {message && (
+        <div className="rounded-xl border border-green-300 bg-green-50 p-4 text-sm text-green-700">
+          {message}
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="Latest server experiment"
-          value={dashboardData.experiment_id ?? "—"}
-          hint="Latest completed federated experiment"
+          label="Global Model Version"
+          value={model ? `v${model.version}` : "—"}
+          hint="Latest accepted model"
         />
 
         <MetricCard
-          label="Validation accuracy"
-          value={
-            dashboardData.validation_accuracy != null
-              ? `${Number(
-                  dashboardData.validation_accuracy
-                ).toFixed(2)}%`
-              : "—"
-          }
-          confirmed
+          label="Checkpoint"
+          value={model?.checkpoint ?? "—"}
+          hint="Saved global model"
         />
 
         <MetricCard
-          label="Algorithm"
-          value={algorithm}
-          hint={algorithmHint}
+          label="Hospital"
+          value={clientId ? `Hospital ${clientId}` : "—"}
+          hint="Current federated client"
         />
 
         <MetricCard
-          label="Communication rounds"
-          value={String(dashboardData.rounds ?? "—")}
+          label="Worker Status"
+          value={hospital?.status ?? "Unavailable"}
+          hint="Live hospital API health"
         />
       </div>
 
       <ChartCard
-        title="Hospital model state"
-        subtitle={`${client.name} Docker worker`}
+        title="Global model synchronization"
+        subtitle="Retrieve the latest accepted global checkpoint"
       >
-        <div className="space-y-4 text-sm">
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <span className="text-muted-foreground">
-              Global model received by this worker
-            </span>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            The hospital downloads the latest global model
+            before performing independent local training.
+            Raw retinal images are not uploaded during
+            synchronization.
+          </p>
 
-            <StatusBadge
-              tone={receivedGlobalModel ? "success" : "neutral"}
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={syncModel}
+              disabled={syncing || !hospital}
+              className="rounded-lg bg-pink-600 px-5 py-3 text-sm font-medium text-white disabled:opacity-50"
             >
-              {receivedGlobalModel ? "Yes" : "No"}
-            </StatusBadge>
-          </div>
+              {syncing ? "Synchronizing..." : "Sync Global Model"}
+            </button>
 
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <span className="text-muted-foreground">
-              Worker status
-            </span>
-
-            <span className="font-medium text-foreground">
-              {runtimeStatus.status
-                ? runtimeStatus.status.toUpperCase()
-                : "—"}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <span className="text-muted-foreground">
-              Completed training requests
-            </span>
-
-            <span className="font-medium text-foreground">
-              {runtimeStatus.completed_training_requests ?? 0}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">
-              Latest local algorithm
-            </span>
-
-            <span className="font-medium text-foreground">
-              {runtimeStatus.algorithm
-                ? runtimeStatus.algorithm.toUpperCase()
-                : "—"}
-            </span>
+            <button
+              type="button"
+              onClick={loadModel}
+              className="rounded-lg border border-border px-5 py-3 text-sm font-medium"
+            >
+              Refresh
+            </button>
           </div>
         </div>
       </ChartCard>
 
-      <ChartCard title="What your hospital contributes">
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          {client.name} trains locally and shares model parameter
-          updates with the federated server. The server weights this
-          hospital&apos;s update according to its local sample count
-          before aggregating it into the global model.
-        </p>
+      <ChartCard
+        title="Model information"
+        subtitle="Retrieved directly from the asynchronous server"
+      >
+        <div className="space-y-3 text-sm">
+          <p>
+            <strong>Version:</strong>{" "}
+            {model?.version ?? "—"}
+          </p>
+          <p>
+            <strong>Checkpoint:</strong>{" "}
+            {model?.checkpoint ?? "—"}
+          </p>
+          <p>
+            <strong>Created:</strong>{" "}
+            {model?.created_at
+              ? new Date(model.created_at).toLocaleString()
+              : "—"}
+          </p>
+          <p>
+            <strong>Server status:</strong>{" "}
+            {model?.status ?? "—"}
+          </p>
+        </div>
       </ChartCard>
     </div>
   );

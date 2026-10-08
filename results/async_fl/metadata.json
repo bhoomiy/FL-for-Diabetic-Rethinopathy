@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "checkpoint": "global_v2.pth",
+  "source_checkpoint": "C:\\Users\\RADHAGOPINATH\\Downloads\\FL-for-Diabetic-Rethinopathy\\results\\experiments\\20261008_153211_fedprox_non_iid_normal\\best_global_model.pth",
+  "created_at": "2026-10-08T16:51:44.377190+00:00",
+  "status": "updated",
+  "last_hospital_id": 2
+}

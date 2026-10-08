@@ -1,0 +1,11 @@
+{
+  "submission_id": "e77347860f904b6eba6caf54a0fba096",
+  "checkpoint_sha256": "9d8485f7c5f1a5951b2a2aebd45d66e1b5b07d8d6c589fa3f3d94440ed93d531",
+  "hospital_id": 3,
+  "base_version": 1,
+  "current_version": 2,
+  "num_samples": 732,
+  "created_at": "2026-10-08T16:52:32.921720+00:00",
+  "decision": "rejected_stale",
+  "new_version": 2
+}

@@ -1,3 +1,4 @@
+
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -16,7 +17,9 @@ RUN pip install --no-cache-dir \
     numpy \
     pillow \
     scikit-learn \
-    flask
+    flask \
+    flask-cors \
+    requests
 
 # Copy only the Python code needed by a hospital
 COPY fl /app/fl
@@ -24,8 +27,6 @@ COPY models /app/models
 
 # Dataset Python module required by FLClient
 COPY datasets/preprocess.py /app/datasets/preprocess.py
-
-
 
 # Python should treat /app as the project root
 ENV PYTHONPATH=/app

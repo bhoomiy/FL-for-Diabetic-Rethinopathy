@@ -4,6 +4,7 @@ export const ADMIN_NAV = [
     section: "Overview",
     items: [
       { label: "Dashboard", to: "/dashboard", icon: "LayoutDashboard" },
+      { label: "Async FL Monitoring", to: "/async-monitoring", icon: "Activity" },
       { label: "Federated Setup", to: "/federated-setup", icon: "Network" },
       { label: "Clients", to: "/clients", icon: "Building2" },
       { label: "Data Distribution", to: "/data-distribution", icon: "PieChart" },
