@@ -1,0 +1,23 @@
+{
+    "experiment_id": "20261008_153211_fedprox_non_iid_normal",
+    "distribution": "non_iid",
+    "algorithm": "fedprox",
+    "num_clients": 4,
+    "rounds": 5,
+    "local_epochs": 1,
+    "batch_size": 16,
+    "learning_rate": 0.0005,
+    "mu": 0.01,
+    "use_class_weights": true,
+    "use_dp": false,
+    "dp_clip_norm": null,
+    "dp_noise_multiplier": null,
+    "final_train_accuracy": 65.61966723549489,
+    "final_val_accuracy": 58.46994535519126,
+    "final_macro_f1": 0.2531821440208537,
+    "final_weighted_f1": 0.4891554002923648,
+    "best_val_accuracy": 58.46994535519126,
+    "best_round": 5,
+    "status": "completed",
+    "test_run": false
+}

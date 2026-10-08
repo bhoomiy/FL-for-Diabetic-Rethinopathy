@@ -17,6 +17,7 @@ import { Route as ConfigureExperimentRouteImport } from './routes/configure-expe
 import { Route as ConfusionMatrixRouteImport } from './routes/confusion-matrix'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as DataDistributionRouteImport } from './routes/data-distribution'
+import { Route as DpVsNonDpRouteImport } from './routes/dp-vs-non-dp'
 import { Route as ExperimentHistoryRouteImport } from './routes/experiment-history'
 import { Route as ExperimentsRouteImport } from './routes/experiments'
 import { Route as FedavgVsFedproxRouteImport } from './routes/fedavg-vs-fedprox'
@@ -68,6 +69,11 @@ const DashboardRoute = DashboardRouteImport.update({
 const DataDistributionRoute = DataDistributionRouteImport.update({
   id: '/data-distribution',
   path: '/data-distribution',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DpVsNonDpRoute = DpVsNonDpRouteImport.update({
+  id: '/dp-vs-non-dp',
+  path: '/dp-vs-non-dp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExperimentHistoryRoute = ExperimentHistoryRouteImport.update({
@@ -140,6 +146,7 @@ export interface FileRoutesByFullPath {
   '/confusion-matrix': typeof ConfusionMatrixRoute
   '/dashboard': typeof DashboardRoute
   '/data-distribution': typeof DataDistributionRoute
+  '/dp-vs-non-dp': typeof DpVsNonDpRoute
   '/experiment-history': typeof ExperimentHistoryRoute
   '/experiments': typeof ExperimentsRoute
   '/fedavg-vs-fedprox': typeof FedavgVsFedproxRoute
@@ -162,6 +169,7 @@ export interface FileRoutesByTo {
   '/confusion-matrix': typeof ConfusionMatrixRoute
   '/dashboard': typeof DashboardRoute
   '/data-distribution': typeof DataDistributionRoute
+  '/dp-vs-non-dp': typeof DpVsNonDpRoute
   '/experiment-history': typeof ExperimentHistoryRoute
   '/experiments': typeof ExperimentsRoute
   '/fedavg-vs-fedprox': typeof FedavgVsFedproxRoute
@@ -185,6 +193,7 @@ export interface FileRoutesById {
   '/confusion-matrix': typeof ConfusionMatrixRoute
   '/dashboard': typeof DashboardRoute
   '/data-distribution': typeof DataDistributionRoute
+  '/dp-vs-non-dp': typeof DpVsNonDpRoute
   '/experiment-history': typeof ExperimentHistoryRoute
   '/experiments': typeof ExperimentsRoute
   '/fedavg-vs-fedprox': typeof FedavgVsFedproxRoute
@@ -209,6 +218,7 @@ export interface FileRouteTypes {
     | '/confusion-matrix'
     | '/dashboard'
     | '/data-distribution'
+    | '/dp-vs-non-dp'
     | '/experiment-history'
     | '/experiments'
     | '/fedavg-vs-fedprox'
@@ -231,6 +241,7 @@ export interface FileRouteTypes {
     | '/confusion-matrix'
     | '/dashboard'
     | '/data-distribution'
+    | '/dp-vs-non-dp'
     | '/experiment-history'
     | '/experiments'
     | '/fedavg-vs-fedprox'
@@ -253,6 +264,7 @@ export interface FileRouteTypes {
     | '/confusion-matrix'
     | '/dashboard'
     | '/data-distribution'
+    | '/dp-vs-non-dp'
     | '/experiment-history'
     | '/experiments'
     | '/fedavg-vs-fedprox'
@@ -276,6 +288,7 @@ export interface RootRouteChildren {
   ConfusionMatrixRoute: typeof ConfusionMatrixRoute
   DashboardRoute: typeof DashboardRoute
   DataDistributionRoute: typeof DataDistributionRoute
+  DpVsNonDpRoute: typeof DpVsNonDpRoute
   ExperimentHistoryRoute: typeof ExperimentHistoryRoute
   ExperimentsRoute: typeof ExperimentsRoute
   FedavgVsFedproxRoute: typeof FedavgVsFedproxRoute
@@ -346,6 +359,13 @@ declare module '@tanstack/react-router' {
       path: '/data-distribution'
       fullPath: '/data-distribution'
       preLoaderRoute: typeof DataDistributionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dp-vs-non-dp': {
+      id: '/dp-vs-non-dp'
+      path: '/dp-vs-non-dp'
+      fullPath: '/dp-vs-non-dp'
+      preLoaderRoute: typeof DpVsNonDpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/experiment-history': {
@@ -444,6 +464,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConfusionMatrixRoute: ConfusionMatrixRoute,
   DashboardRoute: DashboardRoute,
   DataDistributionRoute: DataDistributionRoute,
+  DpVsNonDpRoute: DpVsNonDpRoute,
   ExperimentHistoryRoute: ExperimentHistoryRoute,
   ExperimentsRoute: ExperimentsRoute,
   FedavgVsFedproxRoute: FedavgVsFedproxRoute,

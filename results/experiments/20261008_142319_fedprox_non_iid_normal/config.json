@@ -1,0 +1,17 @@
+{
+    "experiment_id": "20261008_142319_fedprox_non_iid_normal",
+    "distribution": "non_iid",
+    "algorithm": "fedprox",
+    "num_clients": 4,
+    "rounds": 5,
+    "local_epochs": 1,
+    "batch_size": 32,
+    "learning_rate": 0.0005,
+    "mu": 0.01,
+    "use_class_weights": true,
+    "use_dp": false,
+    "dp_clip_norm": null,
+    "dp_noise_multiplier": null,
+    "max_batches": 2,
+    "test_run": false
+}

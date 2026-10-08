@@ -16,6 +16,7 @@ export const ADMIN_NAV = [
       { label: "Configure Experiment", to: "/configure-experiment", icon: "SlidersHorizontal" },
       { label: "FedAvg vs FedProx", to: "/fedavg-vs-fedprox", icon: "GitCompare" },
       { label: "IID vs Non-IID", to: "/iid-vs-non-iid", icon: "Shuffle" },
+      { label: "DP vs Non-DP", to: "/dp-vs-non-dp", icon: "ShieldCheck" },
     ],
   },
   {

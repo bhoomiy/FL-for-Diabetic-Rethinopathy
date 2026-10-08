@@ -1,0 +1,42 @@
+[
+    {
+        "class_id": 0,
+        "class_name": "No DR",
+        "precision": 0.5671140939597316,
+        "recall": 0.9825581395348837,
+        "f1": 0.7191489361702128,
+        "support": 172
+    },
+    {
+        "class_id": 1,
+        "class_name": "Mild",
+        "precision": 0.15,
+        "recall": 0.075,
+        "f1": 0.1,
+        "support": 40
+    },
+    {
+        "class_id": 2,
+        "class_name": "Moderate",
+        "precision": 0.42857142857142855,
+        "recall": 0.028846153846153848,
+        "f1": 0.05405405405405406,
+        "support": 104
+    },
+    {
+        "class_id": 3,
+        "class_name": "Severe",
+        "precision": 0.038461538461538464,
+        "recall": 0.045454545454545456,
+        "f1": 0.041666666666666664,
+        "support": 22
+    },
+    {
+        "class_id": 4,
+        "class_name": "Proliferative",
+        "precision": 0.3333333333333333,
+        "recall": 0.17857142857142858,
+        "f1": 0.23255813953488372,
+        "support": 28
+    }
+]

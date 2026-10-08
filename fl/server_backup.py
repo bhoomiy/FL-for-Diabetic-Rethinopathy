@@ -457,85 +457,134 @@ class FLServer:
     # ONE FEDERATED ROUND
     # ==========================================================
 
-    
     def train_round(self):
-        import gc
 
-        weighted_sum = None
-        total_samples = 0
-        weighted_loss = 0.0
-        weighted_accuracy = 0.0
+        client_weights = []
+        client_sizes = []
 
-        print("\nStarting Docker Federated Learning Round")
+        client_train_losses = []
+        client_train_accuracies = []
+
+        print(
+            "\nStarting Docker Federated Learning Round"
+        )
+
+        # ======================================================
+        # FOUR DOCKER HOSPITALS
+        # ======================================================
 
         for client_id, client_url in enumerate(
-            self.client_urls, start=1
+            self.client_urls,
+            start=1
         ):
-            weights, size, train_loss, train_accuracy = (
-                self.train_docker_client(client_id, client_url)
+
+            (
+                weights,
+                size,
+                train_loss,
+                train_accuracy
+            ) = self.train_docker_client(
+                client_id,
+                client_url
             )
 
-            if size <= 0:
-                raise RuntimeError(
-                    f"Hospital {client_id} returned invalid sample count."
-                )
-
-            if weighted_sum is None:
-                weighted_sum = {}
-
-                for key, tensor in weights.items():
-                    if torch.is_floating_point(tensor):
-                        weighted_sum[key] = (
-                            tensor.detach().cpu().clone().mul_(size)
-                        )
-                    else:
-                        weighted_sum[key] = (
-                            tensor.detach().cpu().clone()
-                        )
-            else:
-                if weights.keys() != weighted_sum.keys():
-                    raise RuntimeError(
-                        f"Hospital {client_id} returned incompatible weights."
-                    )
-
-                for key, tensor in weights.items():
-                    if torch.is_floating_point(tensor):
-                        weighted_sum[key].add_(
-                            tensor.detach().cpu(), alpha=size
-                        )
-
-            total_samples += size
-            weighted_loss += train_loss * size
-            weighted_accuracy += train_accuracy * size
-
-            print(
-                f"Hospital {client_id} accumulated | "
-                f"Samples: {size}"
+            client_weights.append(
+                weights
             )
 
-            del weights
-            gc.collect()
+            client_sizes.append(
+                size
+            )
 
-        if weighted_sum is None or total_samples == 0:
-            raise RuntimeError("No hospital updates received.")
+            client_train_losses.append(
+                train_loss
+            )
 
-        for key, tensor in weighted_sum.items():
-            if torch.is_floating_point(tensor):
-                tensor.div_(total_samples)
+            client_train_accuracies.append(
+                train_accuracy
+            )
 
-        self.global_model.load_state_dict(weighted_sum)
+        # ======================================================
+        # WEIGHTED AGGREGATION
+        # ======================================================
 
-        train_loss = weighted_loss / total_samples
-        train_accuracy = weighted_accuracy / total_samples
+        print(
+            "\nAll hospital updates received."
+        )
 
-        del weighted_sum
-        gc.collect()
+        print(
+            f"Client sample sizes: "
+            f"{client_sizes}"
+        )
 
-        print("\nIncremental weighted aggregation complete.")
-        print(f"Algorithm: {self.algorithm.upper()}")
-        print(f"Distribution: {self.distribution.upper()}")
-        print(f"Total federated samples: {total_samples}")
-        print(f"Federated Training Loss: {train_loss:.4f}")
-        print(f"Federated Training Accuracy: {train_accuracy:.2f}%")
+        new_global_weights = self.fedavg(
+            client_weights,
+            client_sizes
+        )
 
-        return self.global_model, train_loss, train_accuracy
+        self.global_model.load_state_dict(
+            new_global_weights
+        )
+
+        # ======================================================
+        # FEDERATED TRAINING METRICS
+        # ======================================================
+
+        total_samples = sum(
+            client_sizes
+        )
+
+        train_loss = sum(
+            loss * size
+            for loss, size in zip(
+                client_train_losses,
+                client_sizes
+            )
+        ) / total_samples
+
+        train_accuracy = sum(
+            accuracy * size
+            for accuracy, size in zip(
+                client_train_accuracies,
+                client_sizes
+            )
+        ) / total_samples
+
+        # ======================================================
+        # DISPLAY
+        # ======================================================
+
+        print(
+            "\nWeighted aggregation complete."
+        )
+
+        print(
+            f"Algorithm: "
+            f"{self.algorithm.upper()}"
+        )
+
+        print(
+            f"Distribution: "
+            f"{self.distribution.upper()}"
+        )
+
+        print(
+            f"Total federated samples: "
+            f"{total_samples}"
+        )
+
+        print(
+            f"Federated Training Loss: "
+            f"{train_loss:.4f}"
+        )
+
+        print(
+            f"Federated Training Accuracy: "
+            f"{train_accuracy:.2f}%"
+        )
+
+        return (
+            self.global_model,
+            train_loss,
+            train_accuracy
+        )

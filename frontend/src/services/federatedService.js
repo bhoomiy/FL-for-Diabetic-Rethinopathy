@@ -50,8 +50,9 @@ export async function fetchTrainingHistory(
     : `distribution=${encodeURIComponent(distribution)}`;
 
   return apiRequest(
-    `/training-history?${query}`
-  );
+  `/training-history?${query}`,
+  { timeoutMs: 30000 }
+);
 }
 
 // GET /data-distribution

@@ -352,17 +352,30 @@ def training_history():
 
     df = pd.read_csv(history_path)
 
+    
     history = []
+
+    def safe_number(value):
+        if pd.isna(value):
+            return None
+
+        number = float(value)
+
+        if not pd.notna(number) or not -float("inf") < number < float("inf"):
+            return None
+
+        return number
 
     for _, row in df.iterrows():
         history.append({
             "round": int(row["round"]),
-            "trainAcc": float(row["train_accuracy"]),
-            "valAcc": float(row["val_accuracy"]),
-            "trainLoss": float(row["train_loss"]),
-            "valLoss": float(row["val_loss"]),
-            "macroF1": float(row["macro_f1"])
+            "trainAcc": safe_number(row["train_accuracy"]),
+            "valAcc": safe_number(row["val_accuracy"]),
+            "trainLoss": safe_number(row["train_loss"]),
+            "valLoss": safe_number(row["val_loss"]),
+            "macroF1": safe_number(row["macro_f1"])
         })
+
 
     return jsonify({
         "experiment_id": summary.get("experiment_id"),
@@ -945,6 +958,16 @@ def get_experiments():
                 "rounds": config.get(
                     "rounds"
                 ),
+
+                # Training configuration for dynamic comparisons
+                "localEpochs": config.get("local_epochs"),
+                "batchSize": config.get("batch_size"),
+                "maxBatches": config.get("max_batches"),
+
+                # Differential privacy configuration
+                "useDP": config.get("use_dp", False),
+                "dpClipNorm": config.get("dp_clip_norm"),
+                "dpNoiseMultiplier": config.get("dp_noise_multiplier"),
 
                 "accuracy": summary.get(
                     "best_val_accuracy"
